@@ -1,0 +1,6 @@
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/<cuda-version>
+llama-cpp-python
+huggingface-hub
+transformers
+librosa
+torch
