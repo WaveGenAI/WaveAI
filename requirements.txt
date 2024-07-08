@@ -4,3 +4,8 @@ huggingface-hub
 transformers
 librosa
 torch
+flash-attn
+
+git+https://github.com/WaveGenAI/lyrics.git
+git+https://github.com/WaveGenAI/prompt-generator.git
+git+https://github.com/WaveGenAI/tagging.git
