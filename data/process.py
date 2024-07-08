@@ -27,13 +27,13 @@ class DSBuilder:
         self.lyric_gen = LyricGen()
         self.prompt_gen = PromptGenerator()
 
-        self.tagger = Tagger(prob_threshold=0.2)
+        self.tagger = Tagger(prob_threshold=0.1)
         self.tagger.load_model()
 
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
-    def save_data(self, prompt: str, file_path: str, lyric: str = ""):
+    def save_data(self, prompt: str, file_path: str, lyric: str = "") -> None:
         """Save the prompt and audio file to the output directory
 
         Args:
@@ -52,9 +52,12 @@ class DSBuilder:
 
         os.system(f"cp {file_path} {os.path.join(self.output_dir, file_name)}.mp3")
 
-    def build(self):
-        """
-        Build the dataset by generating prompts and lyrics for each audio file
+    def build(self, prob_lyric_threshold: float = 0.3, batch_size: int = 2) -> None:
+        """Build the dataset by generating prompts and lyrics for each audio file
+
+        Args:
+            prob_lyric_threshold (float, optional): the probability threshold for the lyric generation model (how confident it is). Defaults to 0.3.
+            batch_size (int, optional): the size of the batch. Defaults to 2.
         """
 
         batch = []
@@ -63,7 +66,7 @@ class DSBuilder:
 
             batch.append(audio_path)
 
-            if len(batch) < 2:
+            if len(batch) < batch_size:
                 continue
 
             out = self.tagger.tag(batch)
@@ -77,14 +80,16 @@ class DSBuilder:
                 name = os.path.basename(file_path).split(".")[0]
                 music = Music(name, description, metadata=str(tags))
 
-                prompt = self.prompt_gen.generate_prompt_from_music(music)
+                prompt = self.prompt_gen.generate_prompt_from_music(music)[
+                    0
+                ].content.replace('"', "")
 
                 prob, lyric = self.lyric_gen.generate_lyrics(file_path)
 
-                if prob < 0.3:
+                if prob < prob_lyric_threshold:
                     lyric = ""
 
-                self.save_data(prompt[0].content, file_path, lyric)
+                self.save_data(prompt, file_path, lyric)
 
 
 ds = DSBuilder(args.audio_dir, args.output_dir)
