@@ -1,0 +1,9 @@
+[submodule "data/components/tagging"]
+	path = data/components/tagging
+	url = https://github.com/WaveGenAI/tagging.git
+[submodule "data/components/prompt-generator"]
+	path = data/components/prompt-generator
+	url = https://github.com/WaveGenAI/prompt-generator.git
+[submodule "data/components/lyrics"]
+	path = data/components/lyrics
+	url = https://github.com/WaveGenAI/lyrics.git
