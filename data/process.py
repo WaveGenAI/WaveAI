@@ -52,7 +52,7 @@ class DSBuilder:
 
         os.system(f"cp {file_path} {os.path.join(self.output_dir, file_name)}.mp3")
 
-    def build(self, prob_lyric_threshold: float = 0.3, batch_size: int = 2) -> None:
+    def build(self, prob_lyric_threshold: float = 0.3, batch_size: int = 10) -> None:
         """Build the dataset by generating prompts and lyrics for each audio file
 
         Args:
@@ -70,19 +70,21 @@ class DSBuilder:
                 continue
 
             out = self.tagger.tag(batch)
-
             batch = []
 
+            lst_music = []
             for file_path, data in out.items():
                 description = data[0]
                 tags = data[1]
 
                 name = os.path.basename(file_path).split(".")[0]
                 music = Music(name, description, metadata=str(tags))
+                lst_music.append(music)
 
-                prompt = self.prompt_gen.generate_prompt_from_music(music)[
-                    0
-                ].content.replace('"', "")
+            prompts = self.prompt_gen.generate_prompt_from_music(lst_music)
+
+            for file_path, data, prompt in zip(out.keys(), out.values(), prompts):
+                prompt = prompt.content.replace('"', "")
 
                 prob, lyric = self.lyric_gen.generate_lyrics(file_path)
 
