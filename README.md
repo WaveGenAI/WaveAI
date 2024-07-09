@@ -19,3 +19,8 @@ To process the dataset, run:
 ```py
 python data/process.py --audio_dir PATH --output_dir PATH
 ```
+
+To filter wrong description, run:
+```py
+python data/filter.py --audio_dir PATH --threshold 0.1 --delete
+```
