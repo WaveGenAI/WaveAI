@@ -1,5 +1,7 @@
 # WaveAI
-A model that can make edit of music based on a prompt.
+A model that can make edit of music based on a prompt. Follow MusicGen architecture.
+
+![architecture](assets/image.png)
 
 # Installation
 
@@ -24,3 +26,7 @@ To filter wrong description, run:
 ```py
 python data/filter.py --audio_dir PATH --threshold 0.1 --delete
 ```
+
+# License
+
+See the LICENSE file.
