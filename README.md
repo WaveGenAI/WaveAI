@@ -10,7 +10,7 @@ python -m pip install -r requirements.txt
 # Download the dataset
 
 ```py
-python data/download.py --audio_dir PATH
+python data/download.py --download_dir PATH --mtg --nb_files_mgt 10
 ```
 
 # Process the dataset
