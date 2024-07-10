@@ -25,7 +25,9 @@ class WaveAI(L.LightningModule):
 if __name__ == "__main__":
     # wave_ai = WaveAI()
     dataset = SynthDataset(audio_dir="/media/works/waveai_music/")
-    dataloader = DataLoader(dataset, batch_size=10, shuffle=True)
+    dataloader = DataLoader(
+        dataset, batch_size=10, shuffle=True, collate_fn=dataset.collate_fn
+    )
 
     for batch in dataloader:
         print(batch)

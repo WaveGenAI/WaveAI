@@ -20,6 +20,7 @@ class SynthDataset(Dataset):
         max_duration: int = 30,
         mono: bool = True,
         sample_rate: int = 44100,
+        max_length: int = 512,
     ):
         """Initializes the dataset.
 
@@ -28,6 +29,7 @@ class SynthDataset(Dataset):
             max_duration (int, optional): max duration of an audio. Defaults to 30.
             mono (bool, optional): convert to mono. Defaults to True.
             sample_rate (int, optional): sample rate of the audio. Defaults to 44100.
+            max_length (int, optional): max length of the prompt. Defaults to 512.
         """
 
         super().__init__()
@@ -46,7 +48,7 @@ class SynthDataset(Dataset):
         for param in self.audio_codec.parameters():
             param.requires_grad = False
 
-        self.text_encoder = text_encoder.T5EncoderBaseModel()
+        self.text_encoder = text_encoder.T5EncoderBaseModel(max_length=max_length)
         self.text_encoder.to(self.device)
 
         for param in self.text_encoder.parameters():
@@ -89,6 +91,19 @@ class SynthDataset(Dataset):
         with open(audio_file.replace(".mp3", ".txt"), encoding="utf-8") as f:
             prompt = f.read()
 
-        latent_repr = self.text_encoder(prompt)
+        return (discret_audio_repr, prompt)
 
-        return (discret_audio_repr, latent_repr)
+    def collate_fn(self, batch: list) -> tuple:
+        """Collates the batch.
+
+        Args:
+            batch (list): List of tuples containing the audio and text representations.
+
+        Returns:
+            tuple: A tuple containing the audio and text latent representations.
+        """
+
+        audio_reprs, text_reprs = zip(*batch)
+
+        text_latent = self.text_encoder(text_reprs)
+        return audio_reprs, text_latent
