@@ -28,7 +28,9 @@ class T5EncoderBaseModel(nn.Module):
             torch.Tensor: the latent space of the input text
         """
 
-        input_ids = self.tokenizer(inputs, return_tensors="pt").input_ids
+        input_ids = self.tokenizer(inputs, return_tensors="pt", padding=True).input_ids
+        input_ids = input_ids.to(self.encoder.device)
+
         latent_space = self.encoder(input_ids)
 
         return latent_space

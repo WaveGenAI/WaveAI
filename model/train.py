@@ -4,16 +4,13 @@ Train script for WaveAI
 
 from typing import Any
 import lightning as L
-import audio_autoencoder
-import text_encoder
+from loader import SynthDataset
+from torch.utils.data import DataLoader
 
 
 class WaveAI(L.LightningModule):
-    def __init__(self, audio_codec, encoder) -> None:
+    def __init__(self) -> None:
         super().__init__()
-
-        self.audio_codec = audio_codec
-        self.encoder = encoder
 
     def training_step(self, batch, batch_idx):
         raise NotImplementedError
@@ -26,9 +23,10 @@ class WaveAI(L.LightningModule):
 
 
 if __name__ == "__main__":
-    audio_codec_path = audio_autoencoder.utils.download(model_type="44khz")
-    audio_codec = audio_autoencoder.DAC.load(audio_codec_path)
+    # wave_ai = WaveAI()
+    dataset = SynthDataset(audio_dir="/media/works/waveai_music/")
+    dataloader = DataLoader(dataset, batch_size=10, shuffle=True)
 
-    encoder = text_encoder.T5EncoderBaseModel()
-
-    wave_ai = WaveAI(audio_codec, encoder)
+    for batch in dataloader:
+        print(batch)
+        break
