@@ -45,6 +45,6 @@ class T5EncoderBaseModel(nn.Module):
         ).input_ids
         input_ids = input_ids.to(self.encoder.device)
 
-        latent_space = self.encoder(input_ids)
+        latent_space = self.encoder(input_ids).last_hidden_state
 
         return latent_space

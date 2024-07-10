@@ -106,4 +106,7 @@ class SynthDataset(Dataset):
         audio_reprs, text_reprs = zip(*batch)
 
         text_latent = self.text_encoder(text_reprs)
+
+        audio_reprs = torch.stack(audio_reprs).squeeze(1)
+
         return audio_reprs, text_latent

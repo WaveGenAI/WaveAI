@@ -68,6 +68,7 @@ class Encoder(nn.Module):
         strides: list = [2, 4, 8, 8],
         d_latent: int = 64,
     ):
+
         super().__init__()
         # Create first convolution
         self.block = [WNConv1d(1, d_model, kernel_size=7, padding=3)]
@@ -240,10 +241,12 @@ class DAC(BaseModel, CodecMixin):
             "length" : int
                 Number of samples in input audio
         """
-        z = self.encoder(audio_data)
+        z = self.encoder(audio_data)  # B x D x T
+
         z, codes, latents, commitment_loss, codebook_loss = self.quantizer(
             z, n_quantizers
         )
+
         return z, codes, latents, commitment_loss, codebook_loss
 
     def decode(self, z: torch.Tensor):
