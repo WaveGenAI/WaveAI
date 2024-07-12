@@ -160,4 +160,4 @@ cython_debug/
 #.idea/
 
 # ignore test files
-test.py
+*test.py
