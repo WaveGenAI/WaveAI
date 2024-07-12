@@ -241,7 +241,7 @@ class DAC(BaseModel, CodecMixin):
             "length" : int
                 Number of samples in input audio
         """
-        z = self.encoder(audio_data)  # B x D x T
+        z = self.encoder(audio_data)
 
         z, codes, latents, commitment_loss, codebook_loss = self.quantizer(
             z, n_quantizers

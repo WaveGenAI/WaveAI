@@ -1,9 +1,13 @@
-from transformers import MusicgenForConditionalGeneration
+from transformers import AutoProcessor, MusicgenForConditionalGeneration
+from torchsummary import summary
 
+processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
 model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
 
-unconditional_inputs = model.get_unconditional_inputs(num_samples=1)
-
-audio_values = model.generate(
-    **unconditional_inputs, do_sample=True, max_new_tokens=256
+inputs = processor(
+    text=["80s pop track with bassy drums and synth"],
+    padding=True,
+    return_tensors="pt",
 )
+
+model.generate(**inputs)

@@ -3,14 +3,18 @@ Train script for WaveAI
 """
 
 from typing import Any
+
 import lightning as L
 from loader import SynthDataset
 from torch.utils.data import DataLoader
+
+from model.model import WaveAI
 
 
 class WaveAI(L.LightningModule):
     def __init__(self) -> None:
         super().__init__()
+        self.model = WaveAI()
 
     def training_step(self, batch, batch_idx):
         raise NotImplementedError
