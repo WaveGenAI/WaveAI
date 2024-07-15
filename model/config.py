@@ -13,6 +13,7 @@ class Config:
         num_codebooks: int = 9,
         codebook_size: int = 1024,
         hidden_size: int = 1024,
+        max_seq_length: int = 30_000,
         **kwargs,
     ):
         """Initialize the configuration class for the model
@@ -21,11 +22,13 @@ class Config:
             num_codebooks (int, optional): Number of codebooks to use in the model. Defaults to 9.
             codebook_size (int, optional): the number of vectors in each codebook. Defaults to 1024.. Defaults to 1024.
             hidden_size (int, optional): the dimension of the hidden_size to convert the index to a vector and process them. Defaults to 1024.
+            max_seq_length (int, optional): the maximum sequence length to generate. Defaults to 30_000.
             **kwargs: additional arguments
         """
         self.num_codebooks = num_codebooks
         self.codebook_size = codebook_size
         self.hidden_size = hidden_size
+        self.max_seq_length = max_seq_length
 
         for key, value in kwargs.items():
             setattr(self, key, value)

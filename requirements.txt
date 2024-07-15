@@ -6,6 +6,7 @@ librosa
 torch
 flash-attn
 laion_clap
+x-transformers
 
 git+https://github.com/WaveGenAI/lyrics.git
 git+https://github.com/WaveGenAI/prompt-generator.git

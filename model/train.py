@@ -8,7 +8,8 @@ import lightning as L
 from loader import SynthDataset
 from torch.utils.data import DataLoader
 
-from model.model import WaveAI
+from model import WaveAI
+import torch
 
 
 class WaveAI(L.LightningModule):
@@ -26,11 +27,13 @@ class WaveAI(L.LightningModule):
         raise NotImplementedError
 
 
+torch.set_printoptions(threshold=10000)
+
 if __name__ == "__main__":
     # wave_ai = WaveAI()
-    dataset = SynthDataset(audio_dir="/media/works/waveai_music/")
+    dataset = SynthDataset(audio_dir="/home/jourdelune/dev/Archive")
     dataloader = DataLoader(
-        dataset, batch_size=5, shuffle=True, collate_fn=dataset.collate_fn
+        dataset, batch_size=2, shuffle=True, collate_fn=dataset.collate_fn
     )
 
     for batch in dataloader:
