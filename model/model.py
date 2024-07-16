@@ -14,13 +14,22 @@ class WaveAIDecoder(nn.Module):
         super().__init__()
         self.config = config
 
-        self.decoder = Decoder(dim=1024, depth=4, heads=8)
+        self.decoder = Decoder(
+            dim=config.hidden_size,
+            depth=config.decoder_depth,
+            heads=config.decoder_heads,
+            cross_attend=True,
+        )
         self.lm_heads = nn.ModuleList(
             [
                 nn.Linear(self.config.hidden_size, self.config.codebook_size)
                 for _ in range(self.config.num_codebooks)
             ]
-        )
+        )  # each head predict a codebook (not his index)
+
+        self.cross_embd_proj = nn.Linear(
+            self.config.cross_att_hidden_size, self.config.hidden_size
+        )  # if text encoder return different hidden size than the model hidden size
 
     def forward(
         self, input_embds: torch.tensor, cross_att_embs: torch.tensor, **kwargs
@@ -34,7 +43,10 @@ class WaveAIDecoder(nn.Module):
             torch.tensor: a tensor that represent the logits prob
         """
 
-        hidden_space = self.decoder(input_embds)
+        if cross_att_embs.size(-1) != self.config.hidden_size:
+            cross_att_embs = self.cross_embd_proj(cross_att_embs)
+
+        hidden_space = self.decoder(input_embds, context=cross_att_embs)
         lm_logits = torch.stack(
             [lm_head(hidden_space) for lm_head in self.lm_heads], dim=1
         )
