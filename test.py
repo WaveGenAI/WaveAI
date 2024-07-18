@@ -1,5 +1,4 @@
 from transformers import AutoProcessor, MusicgenForConditionalGeneration
-from torchsummary import summary
 
 processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
 model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
