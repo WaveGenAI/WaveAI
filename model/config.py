@@ -12,7 +12,7 @@ class Config:
         self,
         num_codebooks: int = 9,
         codebook_size: int = 1024,
-        hidden_size: int = 1024,
+        hidden_size: int = 512,
         cross_att_hidden_size: int = 768,
         max_seq_length: int = 30_000,
         decoder_depth: int = 4,
