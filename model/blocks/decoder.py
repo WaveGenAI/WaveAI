@@ -52,11 +52,11 @@ class WaveAIDecoder(nn.Module):
         if cross_att_embs.size(-1) != self.config.hidden_size:
             cross_att_embs = self.cross_embd_proj(cross_att_embs)
 
-        print(input_embds.shape, cross_att_embs.shape, padding_mask.shape)
         hidden_space = self.transformer_decoder(
             tgt=input_embds,
             memory=cross_att_embs,
             tgt_mask=attention_mask,
+            tgt_key_padding_mask=padding_mask,
         )
 
         lm_logits = torch.stack(

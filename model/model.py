@@ -60,7 +60,7 @@ class WaveAI(nn.Module):
             ]
 
         # create the padding mask
-        padding_mask = input_ids_shifted == pad_token_id
+        padding_mask = (input_ids_shifted == pad_token_id).all(dim=1)
 
         # pad input_ids to max_length
         input_ids = input_ids_shifted
