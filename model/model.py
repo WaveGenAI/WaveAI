@@ -62,24 +62,25 @@ class WaveAI(nn.Module):
         # create the padding mask
         padding_mask = input_ids_shifted == pad_token_id
 
+        # pad input_ids to max_length
+        input_ids = input_ids_shifted
+
         return input_ids, padding_mask
 
-    def create_attention_mask(self, input_ids: torch.tensor) -> torch.tensor:
-        """Create the attention mask for the input ids
+    def create_attention_mask(self, seq_len: int, device: torch.device) -> torch.Tensor:
+        """Create an attention mask for the decoder
 
         Args:
-            input_ids (torch.tensor): a tensor that represent the codebook idx of shape
+            seq_len (int): the length of the sequence
+            device (torch.device): the device to place the mask on
 
         Returns:
-            torch.tensor: a tensor that represent the attention mask
+            torch.Tensor: the attention mask
         """
-        bsz, num_codebooks, seq_len = input_ids.shape
-        attention_mask = (
-            torch.tril(torch.ones((seq_len, seq_len), device=input_ids.device))
-            .unsqueeze(0)
-            .unsqueeze(0)
+        attention_mask = torch.tril(torch.ones((seq_len, seq_len), device=device)).view(
+            seq_len, seq_len
         )
-        attention_mask = attention_mask.expand(bsz, num_codebooks, -1, -1)
+
         return attention_mask.bool()
 
     def forward(
@@ -101,8 +102,6 @@ class WaveAI(nn.Module):
             max_length=self.config.max_seq_length,
         )
 
-        attention_mask = self.create_attention_mask(input_ids)
-
         # embedding
         inputs_embed = [
             self.embedding_layers[codebook_idx](input_ids[:, codebook_idx])
@@ -111,6 +110,10 @@ class WaveAI(nn.Module):
 
         inputs_embed = sum(inputs_embed)  # dim: (batch_size, length, hidden_size)
         inputs_embed = self.position_embedding(inputs_embed)
+
+        attention_mask = self.create_attention_mask(
+            seq_len=inputs_embed.size(1), device=input_ids.device
+        )
 
         logits = self.decoder(
             inputs_embed,

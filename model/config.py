@@ -14,7 +14,7 @@ class Config:
         codebook_size: int = 1024,
         hidden_size: int = 512,
         cross_att_hidden_size: int = 768,
-        max_seq_length: int = 30_000,
+        max_seq_length: int = 500,
         decoder_depth: int = 4,
         decoder_heads: int = 8,
         **kwargs,

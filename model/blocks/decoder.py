@@ -1,10 +1,9 @@
 """ 
-Decoder block for the Transformer model
+Decoder block
 """
 
 import torch
 import torch.nn as nn
-from x_transformers import Decoder
 
 
 class WaveAIDecoder(nn.Module):
@@ -14,12 +13,11 @@ class WaveAIDecoder(nn.Module):
         super().__init__()
         self.config = config
 
-        self.decoder = Decoder(
-            dim=config.hidden_size,
-            depth=config.decoder_depth,
-            heads=config.decoder_heads,
-            cross_attend=True,
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model=self.config.hidden_size, nhead=4, batch_first=True
         )
+        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=4)
+
         self.lm_heads = nn.ModuleList(
             [
                 nn.Linear(self.config.hidden_size, self.config.codebook_size)
@@ -54,7 +52,13 @@ class WaveAIDecoder(nn.Module):
         if cross_att_embs.size(-1) != self.config.hidden_size:
             cross_att_embs = self.cross_embd_proj(cross_att_embs)
 
-        hidden_space = self.decoder(input_embds, context=cross_att_embs, **kwargs)
+        print(input_embds.shape, cross_att_embs.shape, padding_mask.shape)
+        hidden_space = self.transformer_decoder(
+            tgt=input_embds,
+            memory=cross_att_embs,
+            tgt_mask=attention_mask,
+        )
+
         lm_logits = torch.stack(
             [lm_head(hidden_space) for lm_head in self.lm_heads], dim=1
         )
