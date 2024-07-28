@@ -161,3 +161,5 @@ cython_debug/
 
 # ignore test files
 *test.py
+
+lightning_logs/

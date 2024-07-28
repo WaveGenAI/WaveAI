@@ -31,10 +31,9 @@ class WaveAIDecoder(nn.Module):
 
     def forward(
         self,
-        input_embds: torch.tensor,
-        cross_att_embs: torch.tensor,
-        attention_mask=None,
-        padding_mask=None,
+        input_embds: torch.Tensor,
+        cross_att_embs: torch.Tensor,
+        pattern_mask: torch.Tensor,
         **kwargs
     ) -> torch.tensor:
         """Forward pass through the model
@@ -43,8 +42,7 @@ class WaveAIDecoder(nn.Module):
             input_embds (torch.tensor): a tensor that represent the input embeddings of shape
                 (batch_size, length, hidden_size)
             cross_att_embs (torch.tensor): a tensor that represent the cross attention embeddings
-            attention_mask (torch.tensor, optional): a tensor that represent the attention mask. Defaults to None.
-            padding_mask (torch.tensor, optional): a tensor that represent the padding mask. Defaults to None.
+            pattern_mask (torch.tensor): a tensor that represent the pattern mask
         Returns:
             torch.tensor: a tensor that represent the prob for each codebook idx
         """
@@ -52,11 +50,19 @@ class WaveAIDecoder(nn.Module):
         if cross_att_embs.size(-1) != self.config.hidden_size:
             cross_att_embs = self.cross_embd_proj(cross_att_embs)
 
+        # use .generate_square_subsequent_mask
+        causal_mask = nn.Transformer.generate_square_subsequent_mask(
+            input_embds.size(1)
+        ).to(input_embds.device)
+
+        padding_mask = (pattern_mask == self.config.codebook_size).all(dim=1)[
+            :, : input_embds.size(1)
+        ]
+
         hidden_space = self.transformer_decoder(
             tgt=input_embds,
             memory=cross_att_embs,
-            tgt_mask=attention_mask,
-            tgt_key_padding_mask=padding_mask,
+            tgt_mask=causal_mask,
         )
 
         lm_logits = torch.stack(
