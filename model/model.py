@@ -139,11 +139,11 @@ class WaveAI(nn.Module):
             input_ids = torch.zeros(batch_size, self.config.num_codebooks, 1).to(
                 cross_att_emb.device
             )
-            input_ids = input_ids + self.config.codebook_size
+            input_ids = input_ids + self.config.pad_token_id
 
         input_ids, pattern_mask = self.build_delay_pattern_mask(
             input_ids,
-            pad_token_id=self.config.codebook_size,
+            pad_token_id=self.config.pad_token_id,
             max_length=self.config.max_seq_length,
         )
 
@@ -152,6 +152,7 @@ class WaveAI(nn.Module):
         input_ids = input_ids.reshape(
             -1, self.config.num_codebooks, input_ids.shape[-1]
         )
+
         pattern_mask = pattern_mask.reshape(
             -1, self.config.num_codebooks, pattern_mask.shape[-1]
         )
@@ -165,6 +166,6 @@ class WaveAI(nn.Module):
         inputs_embed = sum(inputs_embed)  # dim: (batch_size, length, hidden_size)
         inputs_embed = self.position_embedding(inputs_embed)
 
-        logits = self.decoder(inputs_embed, cross_att_emb, pattern_mask)
+        logits = self.decoder(inputs_embed, cross_att_emb)
 
         return logits

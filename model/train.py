@@ -2,8 +2,6 @@
 Train script for WaveAI
 """
 
-from typing import Any
-
 import lightning as L
 import torch
 from config import Config
@@ -27,24 +25,25 @@ class WaveAILightning(L.LightningModule):
         labels = batch[0]
         src_text = batch[1]
 
-        bsz, num_codebooks, seq_len = labels.shape
-
         labels = labels[:, :, : self.config.max_seq_length]
 
         logits = self.model(None, src_text)
-        print(logits.shape)
+
         loss = torch.zeros([])
 
-        # per codebook cross-entropy
-        # ref: https://github.com/facebookresearch/audiocraft/blob/69fea8b290ad1b4b40d28f92d1dfc0ab01dbab85/audiocraft/solvers/musicgen.py#L242-L243
-        for codebook in range(self.config.num_codebooks):
-            codebook_logits = (logits[:, codebook].view(-1, logits.shape[-1])).cpu()
-            codebook_labels = labels[:, codebook].view(-1).cpu()
+        labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
 
-            loss += self._loss_fn(codebook_logits, codebook_labels)
+        for codebook in range(self.config.num_codebooks):
+            logits_k = (
+                logits[:, codebook, ...].contiguous().view(-1, logits.size(-1))
+            )  # [B x T, card]
+            targets_k = labels[:, codebook, ...].contiguous().view(-1)  # [B x T]
+
+            loss += self._loss_fn(logits_k.cpu(), targets_k.cpu())
 
         loss = loss / self.config.num_codebooks
-        print(f"Loss: {loss}")
+
+        self.log("train_loss", loss)
         return loss
 
     def configure_optimizers(self):
@@ -57,8 +56,11 @@ if __name__ == "__main__":
 
     dataset = SynthDataset(audio_dir="/media/works/waveai_music/")
     train_loader = DataLoader(
-        dataset, batch_size=1, shuffle=True, collate_fn=dataset.collate_fn
+        dataset, batch_size=4, shuffle=True, collate_fn=dataset.collate_fn
     )
 
-    trainer = L.Trainer(limit_train_batches=100, max_epochs=1)
+    trainer = L.Trainer(
+        limit_train_batches=100,
+        max_epochs=100,
+    )
     trainer.fit(model=model, train_dataloaders=train_loader)

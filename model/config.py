@@ -12,7 +12,7 @@ class Config:
         self,
         num_codebooks: int = 9,
         codebook_size: int = 1024,
-        hidden_size: int = 512,
+        hidden_size: int = 1024,
         cross_att_hidden_size: int = 768,
         max_seq_length: int = 1000,
         decoder_depth: int = 4,
@@ -38,6 +38,8 @@ class Config:
         self.max_seq_length = max_seq_length
         self.decoder_depth = decoder_depth
         self.decoder_heads = decoder_heads
+
+        self.pad_token_id = codebook_size
 
         for key, value in kwargs.items():
             setattr(self, key, value)

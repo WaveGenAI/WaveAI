@@ -30,39 +30,29 @@ class WaveAIDecoder(nn.Module):
         )  # if text encoder return different hidden size than the model hidden size
 
     def forward(
-        self,
-        input_embds: torch.Tensor,
-        cross_att_embs: torch.Tensor,
-        pattern_mask: torch.Tensor,
-        **kwargs
-    ) -> torch.tensor:
+        self, input_embds: torch.Tensor, cross_att_embs: torch.Tensor
+    ) -> torch.Tensor:
         """Forward pass through the model
 
         Args:
             input_embds (torch.tensor): a tensor that represent the input embeddings of shape
                 (batch_size, length, hidden_size)
             cross_att_embs (torch.tensor): a tensor that represent the cross attention embeddings
-            pattern_mask (torch.tensor): a tensor that represent the pattern mask
         Returns:
             torch.tensor: a tensor that represent the prob for each codebook idx
         """
 
         if cross_att_embs.size(-1) != self.config.hidden_size:
-            cross_att_embs = self.cross_embd_proj(cross_att_embs)
+            cross_att_embs = self.cross_embd_proj(
+                cross_att_embs
+            )  # project the cross attention embedding to the model hidden size
 
-        # use .generate_square_subsequent_mask
         causal_mask = nn.Transformer.generate_square_subsequent_mask(
             input_embds.size(1)
         ).to(input_embds.device)
 
-        padding_mask = (pattern_mask == self.config.codebook_size).all(dim=1)[
-            :, : input_embds.size(1)
-        ]
-
         hidden_space = self.transformer_decoder(
-            tgt=input_embds,
-            memory=cross_att_embs,
-            tgt_mask=causal_mask,
+            tgt=input_embds, memory=cross_att_embs, tgt_mask=causal_mask
         )
 
         lm_logits = torch.stack(
