@@ -35,13 +35,14 @@ class WaveAILightning(L.LightningModule):
         # ignore the pad token
         labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
 
+        loss_fn = CrossEntropyLoss()
         for codebook in range(self.config.num_codebooks):
             logits_k = (
                 logits[:, codebook, ...].contiguous().view(-1, logits.size(-1))
             )  # [B x T, embd]
             targets_k = labels[:, codebook, ...].contiguous().view(-1)  # [B x T]
 
-            loss += CrossEntropyLoss()(logits_k.cpu(), targets_k.cpu())
+            loss += loss_fn(logits_k.cpu(), targets_k.cpu())
 
         loss = loss / self.config.num_codebooks
 
