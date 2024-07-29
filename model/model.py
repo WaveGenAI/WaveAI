@@ -21,7 +21,7 @@ class WaveAI(nn.Module):
                 nn.Embedding(self.config.codebook_size + 1, self.config.hidden_size)
                 for _ in range(self.config.num_codebooks)
             ]
-        )
+        )  # each codebook has his own embedding layer
 
         self.decoder = WaveAIDecoder(self.config)
         self.position_embedding = PositionalEncoding(
@@ -65,7 +65,6 @@ class WaveAI(nn.Module):
         )
 
         channel_codebooks = num_codebooks
-
         # we only apply the mask if we have a large enough seq len - otherwise we return as is
         if max_length < 2 * channel_codebooks - 1:
             return input_ids.reshape(
@@ -97,6 +96,7 @@ class WaveAI(nn.Module):
         # and will always be in the first codebook (since it has no codebook offset)
         first_codebook_ids = input_ids[:, 0, :]
         start_ids = (first_codebook_ids == -1).nonzero()[:, 1]
+
         if len(start_ids) > 0:
             first_start_id = min(start_ids)
         else:
@@ -104,8 +104,8 @@ class WaveAI(nn.Module):
             first_start_id = seq_len
 
         # (bsz * num_codebooks, seq_len) -> (bsz, num_codebooks, seq_len)
-        pattern_mask = input_ids.reshape(bsz * num_codebooks, -1)
-        input_ids = input_ids[..., :first_start_id].reshape(bsz * num_codebooks, -1)
+        pattern_mask = input_ids
+        input_ids = input_ids[..., :first_start_id]
         return input_ids, pattern_mask
 
     @staticmethod
@@ -114,11 +114,10 @@ class WaveAI(nn.Module):
         the mask is set to -1, and otherwise setting to the value detailed in the mask.
         """
         seq_len = input_ids.shape[-1]
-        decoder_pad_token_mask = decoder_pad_token_mask
+        decoder_pad_token_mask = decoder_pad_token_mask[..., :seq_len]
         input_ids = torch.where(
             decoder_pad_token_mask == -1, input_ids, decoder_pad_token_mask
         )
-
         return input_ids
 
     def forward(
@@ -135,37 +134,35 @@ class WaveAI(nn.Module):
         """
 
         batch_size = cross_att_emb.size(0)
+
+        # create the input ids if not provided by using the pad token id
         if input_ids is None:
             input_ids = torch.zeros(batch_size, self.config.num_codebooks, 1).to(
                 cross_att_emb.device
             )
             input_ids = input_ids + self.config.pad_token_id
 
-        input_ids, pattern_mask = self.build_delay_pattern_mask(
+        # delay pattern used by Musicgen
+        input_ids, _ = self.build_delay_pattern_mask(
             input_ids,
             pad_token_id=self.config.pad_token_id,
             max_length=self.config.max_seq_length,
         )
 
-        input_ids = self.apply_delay_pattern_mask(input_ids, pattern_mask)
-
-        input_ids = input_ids.reshape(
-            -1, self.config.num_codebooks, input_ids.shape[-1]
-        )
-
-        pattern_mask = pattern_mask.reshape(
-            -1, self.config.num_codebooks, pattern_mask.shape[-1]
-        )
-
-        # embedding
+        # embed the codebook idx
         inputs_embed = [
             self.embedding_layers[codebook_idx](input_ids[:, codebook_idx])
             for codebook_idx in range(self.config.num_codebooks)
         ]
 
+        # sum the embeddings of each codebook idx
         inputs_embed = sum(inputs_embed)  # dim: (batch_size, length, hidden_size)
+
         inputs_embed = self.position_embedding(inputs_embed)
 
+        # pass the embeddings through the decoder
         logits = self.decoder(inputs_embed, cross_att_emb)
 
-        return logits
+        # logits = self.apply_delay_pattern_mask(logits, delay_patern_mask)
+
+        return logits, input_ids

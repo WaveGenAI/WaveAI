@@ -14,9 +14,13 @@ class WaveAIDecoder(nn.Module):
         self.config = config
 
         decoder_layer = nn.TransformerDecoderLayer(
-            d_model=self.config.hidden_size, nhead=4, batch_first=True
+            d_model=self.config.hidden_size,
+            nhead=self.config.decoder_heads,
+            batch_first=True,
         )
-        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=4)
+        self.transformer_decoder = nn.TransformerDecoder(
+            decoder_layer, num_layers=self.config.decoder_depth
+        )
 
         self.lm_heads = nn.ModuleList(
             [
@@ -47,14 +51,17 @@ class WaveAIDecoder(nn.Module):
                 cross_att_embs
             )  # project the cross attention embedding to the model hidden size
 
+        # create a causal mask for the decoder
         causal_mask = nn.Transformer.generate_square_subsequent_mask(
             input_embds.size(1)
         ).to(input_embds.device)
 
+        # pass the input embeddings through the transformer decoder with the cross attention embeddings
         hidden_space = self.transformer_decoder(
             tgt=input_embds, memory=cross_att_embs, tgt_mask=causal_mask
         )
 
+        # each head predict a codebook
         lm_logits = torch.stack(
             [lm_head(hidden_space) for lm_head in self.lm_heads], dim=1
         )

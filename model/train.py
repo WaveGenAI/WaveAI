@@ -18,31 +18,34 @@ class WaveAILightning(L.LightningModule):
         super().__init__()
 
         self.config = Config()
-        self._loss_fn = CrossEntropyLoss()
         self.model = WaveAI(self.config)
 
     def training_step(self, batch, batch_idx):
-        labels = batch[0]
+        tgt_audio = batch[0]
         src_text = batch[1]
 
-        labels = labels[:, :, : self.config.max_seq_length]
+        tgt_audio = tgt_audio[
+            :, :, : self.config.max_seq_length - self.config.num_codebooks + 1
+        ]  # cut the audio to the max length (including the codebooks because of the delay pattern)
 
-        logits = self.model(None, src_text)
+        logits, labels = self.model(tgt_audio, src_text)
 
         loss = torch.zeros([])
 
+        # ignore the pad token
         labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
 
         for codebook in range(self.config.num_codebooks):
             logits_k = (
                 logits[:, codebook, ...].contiguous().view(-1, logits.size(-1))
-            )  # [B x T, card]
+            )  # [B x T, embd]
             targets_k = labels[:, codebook, ...].contiguous().view(-1)  # [B x T]
 
-            loss += self._loss_fn(logits_k.cpu(), targets_k.cpu())
+            loss += CrossEntropyLoss()(logits_k.cpu(), targets_k.cpu())
 
         loss = loss / self.config.num_codebooks
 
+        print(f"Loss: {loss}")
         self.log("train_loss", loss)
         return loss
 
@@ -56,7 +59,7 @@ if __name__ == "__main__":
 
     dataset = SynthDataset(audio_dir="/media/works/waveai_music/")
     train_loader = DataLoader(
-        dataset, batch_size=4, shuffle=True, collate_fn=dataset.collate_fn
+        dataset, batch_size=2, shuffle=True, collate_fn=dataset.collate_fn
     )
 
     trainer = L.Trainer(
