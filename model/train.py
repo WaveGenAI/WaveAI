@@ -32,15 +32,19 @@ class WaveAILightning(L.LightningModule):
 
         loss = torch.zeros([])
 
-        # ignore the pad token
+        # ignore the pad token (when pytorch see -100 in the labels it will ignore it)
         labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
 
         loss_fn = CrossEntropyLoss()
         for codebook in range(self.config.num_codebooks):
             logits_k = (
                 logits[:, codebook, ...].contiguous().view(-1, logits.size(-1))
-            )  # [B x T, embd]
+            )  # [B x T, prob]
             targets_k = labels[:, codebook, ...].contiguous().view(-1)  # [B x T]
+
+            # get index of the most probable token
+            max_prob_idx = logits_k.argmax(dim=-1)
+            print(max_prob_idx)
 
             loss += loss_fn(logits_k.cpu(), targets_k.cpu())
 

@@ -57,9 +57,7 @@ class WaveAIDecoder(nn.Module):
         ).to(input_embds.device)
 
         # pass the input embeddings through the transformer decoder with the cross attention embeddings
-        hidden_space = self.transformer_decoder(
-            tgt=input_embds, memory=cross_att_embs, tgt_mask=causal_mask
-        )
+        hidden_space = self.transformer_decoder(tgt=input_embds, memory=cross_att_embs)
 
         # each head predict a codebook
         lm_logits = torch.stack(
