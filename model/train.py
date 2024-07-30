@@ -12,6 +12,8 @@ from torch.utils.data import DataLoader
 
 from model import WaveAI
 
+# torch.set_printoptions(threshold=10000)
+
 
 class WaveAILightning(L.LightningModule):
     def __init__(self) -> None:
@@ -44,7 +46,7 @@ class WaveAILightning(L.LightningModule):
 
             # get index of the most probable token
             max_prob_idx = logits_k.argmax(dim=-1)
-            print(max_prob_idx)
+            print(targets_k, max_prob_idx)
 
             loss += loss_fn(logits_k.cpu(), targets_k.cpu())
 
@@ -55,7 +57,7 @@ class WaveAILightning(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = optim.AdamW(self.parameters(), lr=1e-3)
+        optimizer = optim.AdamW(self.parameters(), lr=1e-4)
         return optimizer
 
 
