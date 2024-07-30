@@ -136,22 +136,6 @@ class WaveAI(nn.Module):
             torch.tensor: a tensor that represent the logits prob
         """
 
-        batch_size = cross_att_emb.size(0)
-
-        # create the input ids if not provided by using the pad token id
-        if input_ids is None:
-            input_ids = torch.zeros(batch_size, self.config.num_codebooks, 1).to(
-                cross_att_emb.device
-            )
-            input_ids = input_ids + self.config.pad_token_id
-
-            # delay pattern used by Musicgen
-            input_ids, _ = self.build_delay_pattern_mask(
-                input_ids,
-                pad_token_id=self.config.pad_token_id,
-                max_length=self.config.max_seq_length,
-            )
-
         # embed the codebook idx
         inputs_embed = [
             self.embedding_layers[codebook_idx](input_ids[:, codebook_idx])
@@ -168,4 +152,4 @@ class WaveAI(nn.Module):
 
         # logits = self.apply_delay_pattern_mask(logits, delay_patern_mask)
 
-        return logits, input_ids
+        return logits

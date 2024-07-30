@@ -29,7 +29,9 @@ class WaveAILightning(L.LightningModule):
             max_length=self.config.max_seq_length,
         )
 
-        logits, labels = self.model(inputs_id, src_text)
+        labels = inputs_id.detach().clone()
+
+        logits = self.model(inputs_id, src_text)
 
         loss = torch.zeros([])
 
@@ -45,7 +47,7 @@ class WaveAILightning(L.LightningModule):
 
             # get index of the most probable token
             max_prob_idx = logits_k.argmax(dim=-1)
-            # print(targets_k, max_prob_idx)
+            print(max_prob_idx)
 
             loss += loss_fn(logits_k.cpu(), targets_k.cpu())
 
@@ -69,7 +71,9 @@ class WaveAILightning(L.LightningModule):
             max_length=self.config.max_seq_length,
         )
 
-        logits, labels = self.model(inputs_id, src_text)
+        labels = inputs_id.detach().clone()
+
+        logits = self.model(inputs_id, src_text)
 
         loss = torch.zeros([])
 
