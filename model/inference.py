@@ -9,6 +9,7 @@ from audiotools import AudioSignal
 from config import Config
 
 from model import WaveAILightning
+import time
 
 
 class WaveModelInference:
@@ -21,13 +22,11 @@ class WaveModelInference:
 
         self.config = Config()
 
-        if path is None:
-            self.model = WaveAILightning()
-            self.model = WaveAILightning.load_from_checkpoint(path)
-        else:
+        self.model = WaveAILightning()
+        if path is not None:
             self.model = WaveAILightning.load_from_checkpoint(path)
 
-        self.model = self.model.model
+        self.model = self.model.model.to(self.device)
         self.model.eval()
 
         self.text_encoder = text_encoder.T5EncoderBaseModel(max_length=512)
@@ -44,41 +43,57 @@ class WaveModelInference:
 
         encoded_text = self.text_encoder([src_text]).to(self.device)
 
-        seq = torch.zeros(
-            1,
-            self.config.num_codebooks,
-            self.config.max_seq_length - self.config.num_codebooks + 1,
-        ).to(self.device)
-        seq = seq + self.config.pad_token_id
+        input_ids = torch.zeros(1, self.config.num_codebooks, 1)
+        input_ids = input_ids + self.config.pad_token_id
 
-        for i in range(500):
-            logits, mask = self.model(seq, encoded_text)
+        # delay pattern used by Musicgen
+        input_ids, mask = self.model.build_delay_pattern_mask(
+            input_ids,
+            pad_token_id=self.config.pad_token_id,
+            max_length=self.config.max_seq_length,
+        )
+
+        input_ids = input_ids.to(self.device)
+        all_tokens = [input_ids]
+
+        for i in range(self.config.max_seq_length):
+            inputs = torch.cat(all_tokens, dim=-1)
+
+            logits, _ = self.model(inputs, encoded_text)
             max_prob_idx = logits.argmax(dim=-1)
 
-            seq[..., i + 1] = max_prob_idx[..., i + 1]
+            output_ids = max_prob_idx[..., -1].unsqueeze(-1)
 
-            print(
-                f"Step {i + 1} / {self.config.max_seq_length - self.config.num_codebooks + 1}",
-                end="\r",
-            )
+            all_tokens.append(output_ids)
 
-        output_ids = self.model.apply_delay_pattern_mask(seq, mask)
+            print(f"Step {i + 1} / {self.config.max_seq_length}", end="\r")
+
+        output_ids = torch.cat(all_tokens, dim=-1)
+        output_ids = self.model.apply_delay_pattern_mask(output_ids.cpu(), mask)
 
         output_ids = output_ids[output_ids != self.config.pad_token_id].reshape(
             1, self.config.num_codebooks, -1
         )
 
-        output_ids = output_ids[None, ...].squeeze(0).long().cpu()
+        # append the frame dimension back to the audio codes
+        output_ids = output_ids[None, ...].squeeze(0)
 
-        z = self.audio_codec.quantizer.from_codes(output_ids)[0]
-        y = self.audio_codec.decode(z)
+        z = self.audio_codec.quantizer.from_codes(output_ids.cpu())[0]
+        y = torch.tensor([])
+
+        for i in range(0, z.shape[2], 200):
+            print(f"Decoding {i} / {z.shape[2]}", end="\r")
+            z_bis = z[:, :, i : i + 200]
+
+            y_bis = self.audio_codec.decode(z_bis)
+            y = torch.cat((y, y_bis), dim=-1)
 
         y = AudioSignal(y.detach().numpy(), sample_rate=44100)
         y.write("output.wav")
 
 
 model = WaveModelInference(
-    "lightning_logs/version_247/checkpoints/epoch=13-step=1400.ckpt"
+    "lightning_logs/version_246/checkpoints/epoch=3-step=400.ckpt"
 )
 model.greedy_decoding(
     "Calm piano and sustained violin motif suitable for study or sleep."

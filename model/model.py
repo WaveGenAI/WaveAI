@@ -23,7 +23,13 @@ class WaveAILightning(L.LightningModule):
             :, :, : self.config.max_seq_length - self.config.num_codebooks + 1
         ]  # cut the audio to the max length (including the codebooks because of the delay pattern)
 
-        logits, labels = self.model(tgt_audio, src_text)
+        inputs_id, _ = self.model.build_delay_pattern_mask(
+            tgt_audio,
+            pad_token_id=self.config.pad_token_id,
+            max_length=self.config.max_seq_length,
+        )
+
+        logits, labels = self.model(inputs_id, src_text)
 
         loss = torch.zeros([])
 
@@ -57,7 +63,13 @@ class WaveAILightning(L.LightningModule):
             :, :, : self.config.max_seq_length - self.config.num_codebooks + 1
         ]  # cut the audio to the max length (including the codebooks because of the delay pattern)
 
-        logits, labels = self.model(tgt_audio, src_text)
+        inputs_id, _ = self.model.build_delay_pattern_mask(
+            tgt_audio,
+            pad_token_id=self.config.pad_token_id,
+            max_length=self.config.max_seq_length,
+        )
+
+        logits, labels = self.model(inputs_id, src_text)
 
         loss = torch.zeros([])
 

@@ -124,12 +124,12 @@ class WaveAI(nn.Module):
         return input_ids
 
     def forward(
-        self, input_ids: torch.Tensor | None, cross_att_emb: torch.Tensor, **kwargs
+        self, input_ids: torch.Tensor, cross_att_emb: torch.Tensor, **kwargs
     ) -> torch.tensor:
         """Forward pass through the model
 
         Args:
-            input_ids (torch.tensor | None): a tensor that represent the codebook idx of shape
+            input_ids (torch.tensor): a tensor that represent the codebook idx of shape
                 (batch_size, num_codebooks, length)
             cross_att_emb (torch.tensor): a tensor that represent the cross attention embedding of the prompt
         Returns:
@@ -145,12 +145,12 @@ class WaveAI(nn.Module):
             )
             input_ids = input_ids + self.config.pad_token_id
 
-        # delay pattern used by Musicgen
-        input_ids, _ = self.build_delay_pattern_mask(
-            input_ids,
-            pad_token_id=self.config.pad_token_id,
-            max_length=self.config.max_seq_length,
-        )
+            # delay pattern used by Musicgen
+            input_ids, _ = self.build_delay_pattern_mask(
+                input_ids,
+                pad_token_id=self.config.pad_token_id,
+                max_length=self.config.max_seq_length,
+            )
 
         # embed the codebook idx
         inputs_embed = [
