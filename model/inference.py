@@ -46,8 +46,7 @@ class WaveModelInference:
 
         encoded_text = src_text.to(self.device)
 
-        input_ids = torch.zeros(1, self.config.num_codebooks, 1).to(self.device)
-        input_ids = input_ids + self.config.pad_token_id
+        input_ids = self.model.prepare_inputs_for_generation().to(self.device)
 
         input_ids, mask = self.model.build_delay_pattern_mask(
             input_ids,
@@ -58,11 +57,12 @@ class WaveModelInference:
         steps = self.config.max_seq_length - self.config.num_codebooks
 
         for i in range(steps):
+
             logits = self.model(input_ids, encoded_text)
 
             next_token_logits = logits[:, :, -1]
 
-            _, indices = torch.topk(next_token_logits, 2)
+            prob, indices = torch.topk(next_token_logits, 2)
 
             next_tokens = indices[:, :, 0].unsqueeze(-1)
 
@@ -71,7 +71,8 @@ class WaveModelInference:
             input_ids = self.model.apply_delay_pattern_mask(input_ids, mask)
 
             print(f"Step {i + 1} / {steps}", end="\r")
-            time.sleep(1)
+
+            # time.sleep(1)
 
         output_ids = input_ids[input_ids != self.config.pad_token_id].reshape(
             1, self.config.num_codebooks, -1
@@ -98,7 +99,7 @@ class WaveModelInference:
 
 if __name__ == "__main__":
     model = WaveModelInference(
-        "lightning_logs/version_298/checkpoints/epoch=2-step=300.ckpt"
+        "lightning_logs/version_317/checkpoints/epoch=4-step=500.ckpt"
     )
 
     import lightning as L

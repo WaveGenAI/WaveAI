@@ -2,34 +2,41 @@
 Layer for positional encoding
 """
 
-import math
-
 import torch
-from torch import nn
+import torch.nn as nn
 
 
 class PositionalEncoding(nn.Module):
-    """Sinusoidal positional embedding layer for Transformer networks"""
+    """Layer that add the sinusoidal positionnal encoding"""
 
-    def __init__(self, d_model: int, max_len: int = 5000):
+    def __init__(self, dim_model: int, max_seq_len: int):
+        """Initialize the PositionalEncoding layer
+
+        Args:
+            dim_model (int): the model dimension
+            max_seq_len (int): the maximum sequence length
+        """
+
         super().__init__()
 
-        # Create a long enough P matrix
-        self.pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
-        )
+        pe = torch.zeros((1, max_seq_len, dim_model))
 
-        self.pe[:, 0::2] = torch.sin(position * div_term)
-        self.pe[:, 1::2] = torch.cos(position * div_term)
-        self.pe = self.pe.unsqueeze(1)  # Shape: [max_len, 1, d_model]
+        pos = torch.arange(max_seq_len).unsqueeze(1)
+        divid = 10_000 ** (torch.arange(0, dim_model, 2) / dim_model)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
+        pe[0, :, 0::2] = torch.sin(pos / divid)
+        pe[0, :, 1::2] = torch.cos(pos / divid)
+
+        self.__pe = pe
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        """A method that adds the positional encoding to the input tensor
+
         Args:
-            x: Tensor, shape [seq_len, batch_size, embedding_dim]
+            inputs (torch.Tensor): the input tensor
+
+        Returns:
+            torch.Tensor: the input tensor with the positional encoding
         """
-        seq_len = x.size(0)
-        x = x + self.pe[:seq_len, :].to(x.device)
-        return x
+
+        return inputs + self.__pe[:, : inputs.shape[1], :].to(inputs.device)

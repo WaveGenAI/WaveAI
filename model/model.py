@@ -30,7 +30,7 @@ class WaveAILightning(L.LightningModule):
         )
 
         labels = inputs_id.detach().clone()
-        print(inputs_id)
+
         logits = self.model(inputs_id, src_text)
 
         loss = torch.zeros([])
@@ -47,7 +47,9 @@ class WaveAILightning(L.LightningModule):
 
             # get index of the most probable token
             max_prob_idx = logits_k.argmax(dim=-1)
-            # print(max_prob_idx[10:15], targets_k[10:15])
+
+            # print(targets_k, max_prob_idx)
+
             loss += loss_fn(logits_k.cpu(), targets_k.cpu())
 
         loss = loss / self.config.num_codebooks

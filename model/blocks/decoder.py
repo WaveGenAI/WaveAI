@@ -58,7 +58,10 @@ class WaveAIDecoder(nn.Module):
 
         # pass the input embeddings through the transformer decoder with the cross attention embeddings
         hidden_space = self.transformer_decoder(
-            tgt=input_embds, memory=cross_att_embs, tgt_mask=causal_mask
+            tgt=input_embds,
+            memory=cross_att_embs,
+            tgt_mask=causal_mask,
+            memory_is_causal=False,
         )
 
         # each head predict a codebook

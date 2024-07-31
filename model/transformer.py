@@ -123,6 +123,23 @@ class WaveAI(nn.Module):
         )
         return input_ids
 
+    def prepare_inputs_for_generation(self, batch_size: int = 1) -> torch.Tensor:
+        """Create the initial input for the decoder
+
+        Args:
+            batch_size (int, optional): the batch size. Defaults to 1.
+
+        Returns:
+            torch.Tensor: a tensor that represent the initial input for the decoder
+        """
+
+        decoder_input_ids_start = (
+            torch.ones((batch_size * self.config.num_codebooks, 1), dtype=torch.long)
+            * self.config.pad_token_id
+        )
+
+        return decoder_input_ids_start
+
     def forward(
         self, input_ids: torch.Tensor, cross_att_emb: torch.Tensor, **kwargs
     ) -> torch.tensor:
