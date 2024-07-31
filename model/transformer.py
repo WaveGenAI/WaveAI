@@ -134,7 +134,7 @@ class WaveAI(nn.Module):
         """
 
         decoder_input_ids_start = (
-            torch.ones((batch_size * self.config.num_codebooks, 1), dtype=torch.long)
+            torch.ones((batch_size, self.config.num_codebooks, 1), dtype=torch.long)
             * self.config.pad_token_id
         )
 

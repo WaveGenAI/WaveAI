@@ -32,7 +32,7 @@ class WaveAILightning(L.LightningModule):
         labels = inputs_id.detach().clone()
 
         logits = self.model(inputs_id, src_text)
-
+        print(labels)
         loss = torch.zeros([])
 
         # ignore the pad token (when pytorch see -100 in the labels it will ignore it)

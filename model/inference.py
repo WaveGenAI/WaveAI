@@ -2,14 +2,16 @@
 Code for inference with the model.
 """
 
+import time
+
 import audio_autoencoder
 import text_encoder
 import torch
+import torch.nn.functional as F
 from audiotools import AudioSignal
 from config import Config
 
 from model import WaveAILightning
-import time
 
 
 class WaveModelInference:
@@ -34,21 +36,28 @@ class WaveModelInference:
         audio_codec_path = audio_autoencoder.utils.download(model_type="44khz")
         self.audio_codec = audio_autoencoder.DAC.load(audio_codec_path)
 
-    def greedy_decoding(self, src_text: str | torch.Tensor):
+    def greedy_decoding(
+        self,
+        src_text: str | torch.Tensor,
+        repetition_penalty: float = 1.2,
+    ):
         """Perform greedy decoding with the model.
 
         Args:
             src_text (str): the source text to generate the audio from
+            repetition_penalty (float): penalty factor for repeated tokens
         """
 
         if isinstance(src_text, str):
             encoded_text = self.text_encoder([src_text])
+        else:
+            encoded_text = src_text
 
-        encoded_text = src_text.to(self.device)
+        encoded_text = encoded_text.to(self.device)
 
         input_ids = self.model.prepare_inputs_for_generation().to(self.device)
-
-        input_ids, mask = self.model.build_delay_pattern_mask(
+        output_ids = self.model.prepare_inputs_for_generation().to(self.device)
+        _, mask = self.model.build_delay_pattern_mask(
             input_ids,
             pad_token_id=self.config.pad_token_id,
             max_length=self.config.max_seq_length,
@@ -57,24 +66,40 @@ class WaveModelInference:
         steps = self.config.max_seq_length - self.config.num_codebooks
 
         for i in range(steps):
-
+            input_ids = output_ids.clone()
             logits = self.model(input_ids, encoded_text)
+            next_token_logits = logits[:, :, -1, :]
 
-            next_token_logits = logits[:, :, -1]
+            # Apply repetition penalty
+            for j in range(self.config.num_codebooks):
+                prev_tokens = output_ids[0, j]
+                for k in range(len(prev_tokens)):
+                    if prev_tokens[k] != self.config.pad_token_id:
+                        next_token_logits[0, j, prev_tokens[k]] /= repetition_penalty
 
-            prob, indices = torch.topk(next_token_logits, 2)
+            # Apply temperature to sharpen the distribution
+            temperature = 0.8
+            next_token_logits = next_token_logits / temperature
 
-            next_tokens = indices[:, :, 0].unsqueeze(-1)
+            # Convert to probabilities
+            next_token_probs = F.softmax(next_token_logits, dim=-1)
 
-            input_ids = torch.cat((input_ids, next_tokens), dim=-1)
+            # Sample from the distribution
+            next_tokens = torch.multinomial(
+                next_token_probs.view(-1, next_token_probs.size(-1)), num_samples=1
+            )
+            next_tokens = next_tokens.view(
+                next_token_probs.size(0), next_token_probs.size(1), 1
+            )
 
-            input_ids = self.model.apply_delay_pattern_mask(input_ids, mask)
+            output_ids = torch.cat((output_ids, next_tokens), dim=-1)
+            output_ids = self.model.apply_delay_pattern_mask(output_ids, mask)
 
             print(f"Step {i + 1} / {steps}", end="\r")
 
             # time.sleep(1)
 
-        output_ids = input_ids[input_ids != self.config.pad_token_id].reshape(
+        output_ids = output_ids[output_ids != self.config.pad_token_id].reshape(
             1, self.config.num_codebooks, -1
         )
 
@@ -102,17 +127,5 @@ if __name__ == "__main__":
         "lightning_logs/version_317/checkpoints/epoch=4-step=500.ckpt"
     )
 
-    import lightning as L
-    from lightning.pytorch.callbacks import LearningRateMonitor
-    from lightning.pytorch.callbacks.early_stopping import EarlyStopping
-    from loader import SynthDataset
-    from torch.utils.data import DataLoader, random_split
-
-    dataset = SynthDataset(audio_dir="/media/works/waveai_music/")
-    train_loader = DataLoader(
-        dataset, batch_size=1, shuffle=True, collate_fn=dataset.collate_fn
-    )
-
-    first_batch = next(iter(train_loader))
-
-    model.greedy_decoding(first_batch[1])
+    text = "80s pop track with bassy drums and synth"
+    model.greedy_decoding(text)
