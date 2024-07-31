@@ -3,6 +3,7 @@ Train script for WaveAI
 """
 
 import lightning as L
+import torch.nn as nn
 from lightning.pytorch.callbacks import LearningRateMonitor
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from loader import SynthDataset
@@ -15,6 +16,11 @@ lr_monitor = LearningRateMonitor(logging_interval="step")
 
 model = WaveAILightning()
 
+# xavier initialization
+for p in model.parameters():
+    if p.dim() > 1:
+        nn.init.xavier_uniform_(p)
+
 dataset = SynthDataset(audio_dir="/media/works/waveai_music/")
 
 train_size = int(0.9 * len(dataset))
@@ -23,7 +29,7 @@ test_size = len(dataset) - train_size
 train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
 train_loader = DataLoader(
-    train_dataset, batch_size=2, shuffle=True, collate_fn=dataset.collate_fn
+    train_dataset, batch_size=1, shuffle=True, collate_fn=dataset.collate_fn
 )
 valid_loader = DataLoader(
     test_dataset, batch_size=2, shuffle=False, collate_fn=dataset.collate_fn
@@ -34,4 +40,5 @@ trainer = L.Trainer(
     max_epochs=100,
     callbacks=[lr_monitor, EarlyStopping(monitor="val_loss", mode="min")],
 )
+
 trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=valid_loader)

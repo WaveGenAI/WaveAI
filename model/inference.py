@@ -34,14 +34,17 @@ class WaveModelInference:
         audio_codec_path = audio_autoencoder.utils.download(model_type="44khz")
         self.audio_codec = audio_autoencoder.DAC.load(audio_codec_path)
 
-    def greedy_decoding(self, src_text: str):
+    def greedy_decoding(self, src_text: str | torch.Tensor):
         """Perform greedy decoding with the model.
 
         Args:
             src_text (str): the source text to generate the audio from
         """
 
-        encoded_text = self.text_encoder([src_text]).to(self.device)
+        if isinstance(src_text, str):
+            encoded_text = self.text_encoder([src_text])
+
+        encoded_text = src_text.to(self.device)
 
         input_ids = torch.zeros(1, self.config.num_codebooks, 1).to(self.device)
         input_ids = input_ids + self.config.pad_token_id
@@ -68,6 +71,7 @@ class WaveModelInference:
             input_ids = self.model.apply_delay_pattern_mask(input_ids, mask)
 
             print(f"Step {i + 1} / {steps}", end="\r")
+            time.sleep(1)
 
         output_ids = input_ids[input_ids != self.config.pad_token_id].reshape(
             1, self.config.num_codebooks, -1
@@ -92,14 +96,22 @@ class WaveModelInference:
         y.write("output.wav")
 
 
-model = WaveModelInference(
-    "lightning_logs/version_276/checkpoints/epoch=18-step=1900.ckpt"
-)
+if __name__ == "__main__":
+    model = WaveModelInference(
+        "lightning_logs/version_298/checkpoints/epoch=2-step=300.ckpt"
+    )
 
-text = """ 
-Emotional pop vocals with kicks, snares, hi-hats, synth leads, bass, and keys; instrumental with medium tempo, groovy bass, steady rhythm, cymbals, tambourine, keyboard; passionate vocals with punchy kicks, snares, hi-hats, synth leads, bass, keys; groovy synth cover with kicks, snares, hi-hats, claps, bass, keys, stereo crackle.
+    import lightning as L
+    from lightning.pytorch.callbacks import LearningRateMonitor
+    from lightning.pytorch.callbacks.early_stopping import EarlyStopping
+    from loader import SynthDataset
+    from torch.utils.data import DataLoader, random_split
 
-Lyric: 
-""".strip()
+    dataset = SynthDataset(audio_dir="/media/works/waveai_music/")
+    train_loader = DataLoader(
+        dataset, batch_size=1, shuffle=True, collate_fn=dataset.collate_fn
+    )
 
-model.greedy_decoding(text)
+    first_batch = next(iter(train_loader))
+
+    model.greedy_decoding(first_batch[1])
