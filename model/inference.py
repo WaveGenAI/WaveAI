@@ -55,10 +55,10 @@ class WaveModelInference:
 
         encoded_text = encoded_text.to(self.device)
 
-        input_ids = self.model.prepare_inputs_for_generation().to(self.device)
         output_ids = self.model.prepare_inputs_for_generation().to(self.device)
+
         _, mask = self.model.build_delay_pattern_mask(
-            input_ids,
+            output_ids,
             pad_token_id=self.config.pad_token_id,
             max_length=self.config.max_seq_length,
         )
@@ -71,23 +71,13 @@ class WaveModelInference:
             next_token_logits = logits[:, :, -1, :]
 
             # Apply repetition penalty
-            for j in range(self.config.num_codebooks):
-                prev_tokens = output_ids[0, j]
-                for k in range(len(prev_tokens)):
-                    if prev_tokens[k] != self.config.pad_token_id:
-                        next_token_logits[0, j, prev_tokens[k]] /= repetition_penalty
-
-            # Apply temperature to sharpen the distribution
-            temperature = 0.8
-            next_token_logits = next_token_logits / temperature
 
             # Convert to probabilities
             next_token_probs = F.softmax(next_token_logits, dim=-1)
 
             # Sample from the distribution
-            next_tokens = torch.multinomial(
-                next_token_probs.view(-1, next_token_probs.size(-1)), num_samples=1
-            )
+            next_tokens = torch.argmax(next_token_probs, dim=-1)
+
             next_tokens = next_tokens.view(
                 next_token_probs.size(0), next_token_probs.size(1), 1
             )
