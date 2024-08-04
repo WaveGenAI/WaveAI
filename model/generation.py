@@ -1,21 +1,12 @@
-""" 
-Class that implements multiple generation methods.
-"""
-
 import torch
 import torch.nn.functional as F
 
 
 class Generation:
-    """
-    Generation class that implements multiple generation
-    """
-
     def __init__(self, model: torch.nn.Module):
         self.model = model
 
     def beam_search(self, *args, **kwargs):
-        """Beam search"""
         raise NotImplementedError
 
     def greedy_decoding(
@@ -23,47 +14,52 @@ class Generation:
         inputs_id: torch.Tensor,
         mask: torch.Tensor,
         cross_att_emb: torch.Tensor,
-        repetition_penalty: float = 1.2,
+        repetition_penalty: float = 2,
+        temperature: float = 1,
+        top_k: int = 50,
     ) -> torch.Tensor:
-        """Greedy decoding
-        Args:
-        inputs_id (torch.Tensor): the input tensor
-        mask (torch.Tensor): the mask tensor
-        cross_att_emb (torch.Tensor): the cross attention embedding
-        repetition_penalty (float, optional): penalty factor for repeated tokens. Defaults to 1.2.
-        Returns:
-        torch.Tensor: the output tensor
-        """
         output_ids = inputs_id.clone()
         steps = self.model.config.max_seq_length - self.model.config.num_codebooks
 
         def apply_repeat_penalty(logits, context, penalty):
-            """Apply repetition penalty"""
+            for i in range(self.model.config.num_codebooks):
+                context_k = context[:, i, :].squeeze(0)
+                for previous_tokens in set(context_k.tolist()):
+                    logits[:, i, previous_tokens - 1] /= penalty
 
-            # TODO: Implement repetition penalty
+            return logits
 
+        def top_k_sampling(logits, k):
+            top_k_logits, _ = torch.topk(logits, k, dim=-1)
+            indices_to_remove = logits < top_k_logits[..., -1, None]
+            logits[indices_to_remove] = float("-inf")
             return logits
 
         for i in range(steps):
             input_ids = output_ids.clone()
             logits = self.model(input_ids, cross_att_emb)
-            next_token_logits = logits[:, :, -1, :]  # get the last token logits
-
-            # Apply repetition penalty
+            next_token_logits = logits[
+                :, :, -1, :
+            ]  # shape: [batch_size, num_heads, vocab_size]
             next_token_logits = apply_repeat_penalty(
                 next_token_logits, input_ids, repetition_penalty
             )
 
-            # Calculate probabilities
+            next_token_logits = top_k_sampling(next_token_logits, top_k)
+
+            next_token_logits = next_token_logits / temperature
+
             next_token_probs = F.softmax(next_token_logits, dim=-1)
 
-            # Sample from the distribution
-            next_tokens = torch.argmax(next_token_probs, dim=-1)
-            next_tokens = next_tokens.view(
-                next_token_probs.size(0), next_token_probs.size(1), 1
-            )
+            batch_size, num_heads, vocab_size = next_token_probs.shape
+            next_token_probs_flat = next_token_probs.view(-1, vocab_size)
+
+            next_tokens_flat = torch.multinomial(next_token_probs_flat, num_samples=1)
+
+            # Reshaping pour correspondre à la forme originale
+            next_tokens = next_tokens_flat.view(batch_size, num_heads, 1)
+
             output_ids = torch.cat((output_ids, next_tokens), dim=-1)
             output_ids = self.model.apply_delay_pattern_mask(output_ids, mask)
             print(f"Step {i + 1} / {steps}", end="\r")
-
         return output_ids

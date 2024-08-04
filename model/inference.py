@@ -88,8 +88,12 @@ class WaveModelInference:
 
 if __name__ == "__main__":
     model = WaveModelInference(
-        "lightning_logs/version_317/checkpoints/epoch=4-step=500.ckpt"
+        "lightning_logs/version_247/checkpoints/epoch=13-step=1400.ckpt"
     )
 
-    text = "80s pop track with bassy drums and synth"
+    text = """ 
+    bass guitar with drums and piano
+        
+    Lyric: 
+    """.strip()
     model.greedy_decoding(text)

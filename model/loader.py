@@ -17,28 +17,32 @@ class SynthDataset(Dataset):
     def __init__(
         self,
         audio_dir: str,
-        max_duration: int = 30,
+        duration: int = 30,
         mono: bool = True,
         sample_rate: int = 44100,
         max_length: int = 512,
+        prompt: bool = False,
     ):
         """Initializes the dataset.
 
         Args:
             audio_dir (str): Path to the directory containing the audio files.
-            max_duration (int, optional): max duration of an audio. Defaults to 30.
+            duration (int, optional): duration of an audio. Defaults to 30.
             mono (bool, optional): convert to mono. Defaults to True.
             sample_rate (int, optional): sample rate of the audio. Defaults to 44100.
             max_length (int, optional): max length of the prompt. Defaults to 512.
+            prompt (bool, optional): whether to use prompt. Defaults to False.
         """
 
         super().__init__()
 
         self.filenames = glob.glob(audio_dir + "/*.mp3")
+
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
+        self._prompt = prompt
         self._mono = mono
-        self._cut_length = max_duration
+        self._duration = duration
         self._sample_rate = sample_rate
 
         audio_codec_path = audio_autoencoder.utils.download(model_type="44khz")
@@ -76,17 +80,24 @@ class SynthDataset(Dataset):
         audio_file = self.filenames[index]
         audio = AudioSignal(
             audio_file,
-            duration=self._cut_length if self._cut_length > 0 else None,
-            sample_rate=44100,
+            duration=self._duration if self._duration > 0 else None,
         )
+        audio.resample(self._sample_rate)
 
         if self._mono:
             audio = audio.to_mono()
 
-        audio.zero_pad_to(0, self._cut_length * self._sample_rate - audio.signal_length)
+        # normalize the audio length
+        if audio.shape[-1] < (self._duration * self._sample_rate):
+            audio = audio.zero_pad_to(self._duration * self._sample_rate)
+        else:
+            audio = audio[:, :, : self._duration * self._sample_rate]
 
         discret_audio_repr = self.audio_codec.compress(audio)
         discret_audio_repr = discret_audio_repr.codes.to(self.device)
+
+        if not self._prompt:
+            return (discret_audio_repr, None)
 
         with open(audio_file.replace(".mp3", ".txt"), encoding="utf-8") as f:
             prompt = f.read()
@@ -104,9 +115,11 @@ class SynthDataset(Dataset):
         """
 
         audio_reprs, text_reprs = zip(*batch)
+        audio_reprs = torch.stack(audio_reprs).squeeze(1)
+
+        if not self._prompt:
+            return audio_reprs
 
         text_latent = self.text_encoder(text_reprs)
-
-        audio_reprs = torch.stack(audio_reprs).squeeze(1)
 
         return audio_reprs, text_latent

@@ -34,19 +34,22 @@ class WaveAIDecoder(nn.Module):
         )  # if text encoder return different hidden size than the model hidden size
 
     def forward(
-        self, input_embds: torch.Tensor, cross_att_embs: torch.Tensor
+        self, input_embds: torch.Tensor, cross_att_embs: torch.Tensor = None
     ) -> torch.Tensor:
         """Forward pass through the model
 
         Args:
             input_embds (torch.tensor): a tensor that represent the input embeddings of shape
                 (batch_size, length, hidden_size)
-            cross_att_embs (torch.tensor): a tensor that represent the cross attention embeddings
+            cross_att_embs (torch.tensor | None): a tensor that represent the cross attention embedding of the prompt
         Returns:
             torch.tensor: a tensor that represent the prob for each codebook idx
         """
 
-        if cross_att_embs.size(-1) != self.config.hidden_size:
+        if (
+            cross_att_embs is not None
+            and cross_att_embs.size(-1) != self.config.hidden_size
+        ):
             cross_att_embs = self.cross_embd_proj(
                 cross_att_embs
             )  # project the cross attention embedding to the model hidden size

@@ -141,14 +141,14 @@ class WaveAI(nn.Module):
         return decoder_input_ids_start
 
     def forward(
-        self, input_ids: torch.Tensor, cross_att_emb: torch.Tensor, **kwargs
+        self, input_ids: torch.Tensor, cross_att_emb: torch.Tensor = None, **kwargs
     ) -> torch.tensor:
         """Forward pass through the model
 
         Args:
             input_ids (torch.tensor): a tensor that represent the codebook idx of shape
                 (batch_size, num_codebooks, length)
-            cross_att_emb (torch.tensor): a tensor that represent the cross attention embedding of the prompt
+            cross_att_emb (torch.tensor | None): a tensor that represent the cross attention embedding of the prompt
         Returns:
             torch.tensor: a tensor that represent the logits prob
         """

@@ -1,16 +1,12 @@
---extra-index-url https://abetlen.github.io/llama-cpp-python/whl/<cuda-version>
-llama-cpp-python
+packaging
+wheel
+torch
 huggingface-hub
 transformers
 librosa
-torch
 flash-attn
 laion_clap
 x-transformers
-
-git+https://github.com/WaveGenAI/lyrics.git
-git+https://github.com/WaveGenAI/prompt-generator.git
-git+https://github.com/WaveGenAI/tagging.git
 
 argbind>=0.3.7
 descript-audiotools>=0.7.2

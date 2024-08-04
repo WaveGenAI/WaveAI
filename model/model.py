@@ -4,20 +4,28 @@ from config import Config
 from torch import optim
 from torch.nn import CrossEntropyLoss
 from torch.optim import lr_scheduler
-
 from transformer import WaveAI
 
 
 class WaveAILightning(L.LightningModule):
-    def __init__(self) -> None:
+    def __init__(self, use_prompt: bool = False) -> None:
+        """Lightning module for WaveAI.
+
+        Args:
+            use_prompt (bool, optional): is model trained on prompt. Defaults to False.
+        """
+
         super().__init__()
 
         self.config = Config()
+        self._use_prompt = use_prompt
         self.model = WaveAI(self.config)
 
     def training_step(self, batch, batch_idx):
         tgt_audio = batch[0]
-        src_text = batch[1]
+
+        if self._use_prompt:
+            src_text = batch[1]
 
         tgt_audio = tgt_audio[
             :, :, : self.config.max_seq_length - self.config.num_codebooks + 1
@@ -31,8 +39,8 @@ class WaveAILightning(L.LightningModule):
 
         labels = inputs_id.detach().clone()
 
-        logits = self.model(inputs_id, src_text)
-        print(labels)
+        logits = self.model(inputs_id, src_text if self._use_prompt else None)
+
         loss = torch.zeros([])
 
         # ignore the pad token (when pytorch see -100 in the labels it will ignore it)
@@ -60,7 +68,9 @@ class WaveAILightning(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         tgt_audio = batch[0]
-        src_text = batch[1]
+
+        if self._use_prompt:
+            src_text = batch[1]
 
         tgt_audio = tgt_audio[
             :, :, : self.config.max_seq_length - self.config.num_codebooks + 1
@@ -74,7 +84,7 @@ class WaveAILightning(L.LightningModule):
 
         labels = inputs_id.detach().clone()
 
-        logits = self.model(inputs_id, src_text)
+        logits = self.model(inputs_id, src_text if self._use_prompt else None)
 
         loss = torch.zeros([])
 
