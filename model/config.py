@@ -15,7 +15,7 @@ class Config:
         hidden_size: int = 1024,
         cross_att_hidden_size: int = 512,
         max_seq_length: int = 1000,
-        decoder_depth: int = 4,
+        decoder_depth: int = 8,
         decoder_heads: int = 8,
         **kwargs,
     ):

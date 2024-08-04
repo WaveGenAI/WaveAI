@@ -4,22 +4,24 @@ Decoder block
 
 import torch
 import torch.nn as nn
+from x_transformers import Decoder
 
 
 class WaveAIDecoder(nn.Module):
-    """Transformer decoder class for generate prediction of the next codebook idx"""
+    """Transformer decoder class for generating prediction of the next codebook idx"""
 
     def __init__(self, config):
         super().__init__()
         self.config = config
 
-        decoder_layer = nn.TransformerDecoderLayer(
-            d_model=self.config.hidden_size,
-            nhead=self.config.decoder_heads,
-            batch_first=True,
-        )
-        self.transformer_decoder = nn.TransformerDecoder(
-            decoder_layer, num_layers=self.config.decoder_depth
+        self.transformer_decoder = Decoder(
+            dim=self.config.hidden_size,
+            depth=self.config.decoder_depth,
+            heads=self.config.decoder_heads,
+            cross_attend=True,  # enable cross-attention
+            attn_dropout=0.1,
+            ff_dropout=0.1,
+            attn_flash=True,
         )
 
         self.lm_heads = nn.ModuleList(
@@ -27,11 +29,11 @@ class WaveAIDecoder(nn.Module):
                 nn.Linear(self.config.hidden_size, self.config.codebook_size)
                 for _ in range(self.config.num_codebooks)
             ]
-        )  # each head predict a codebook (not his index)
+        )  # each head predicts a codebook (not its index)
 
         self.cross_embd_proj = nn.Linear(
             self.config.cross_att_hidden_size, self.config.hidden_size
-        )  # if text encoder return different hidden size than the model hidden size
+        )  # if text encoder returns a different hidden size than the model hidden size
 
     def forward(
         self, input_embds: torch.Tensor, cross_att_embs: torch.Tensor | None = None
@@ -39,11 +41,11 @@ class WaveAIDecoder(nn.Module):
         """Forward pass through the model
 
         Args:
-            input_embds (torch.tensor): a tensor that represent the input embeddings of shape
+            input_embds (torch.tensor): a tensor representing the input embeddings of shape
                 (batch_size, length, hidden_size)
-            cross_att_embs (torch.tensor | None): a tensor that represent the cross attention embedding of the prompt
+            cross_att_embs (torch.tensor | None): a tensor representing the cross-attention embedding of the prompt
         Returns:
-            torch.tensor: a tensor that represent the prob for each codebook idx
+            torch.tensor: a tensor representing the prob for each codebook idx
         """
 
         if cross_att_embs is None:
@@ -56,22 +58,15 @@ class WaveAIDecoder(nn.Module):
         if cross_att_embs.size(-1) != self.config.hidden_size:
             cross_att_embs = self.cross_embd_proj(
                 cross_att_embs
-            )  # project the cross attention embedding to the model hidden size
+            )  # project the cross-attention embedding to the model hidden size
 
-        # create a causal mask for the decoder
-        causal_mask = nn.Transformer.generate_square_subsequent_mask(
-            input_embds.size(1)
-        ).to(input_embds.device)
-
-        # pass the input embeddings through the transformer decoder with the cross attention embeddings
+        # Pass the input embeddings through the x-transformer decoder with the cross-attention embeddings
         hidden_space = self.transformer_decoder(
-            tgt=input_embds,
-            memory=cross_att_embs,
-            tgt_mask=causal_mask,
-            memory_is_causal=False,
+            x=input_embds,
+            context=cross_att_embs,
         )
 
-        # each head predict a codebook
+        # each head predicts a codebook
         lm_logits = torch.stack(
             [lm_head(hidden_space) for lm_head in self.lm_heads], dim=1
         )
