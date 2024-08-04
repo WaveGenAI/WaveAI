@@ -36,11 +36,11 @@ class WaveModelInference:
 
         self.generation = Generation(self.model)
 
-    def greedy_decoding(
+    def sampling(
         self,
         src_text: str | torch.Tensor,
     ):
-        """Perform greedy decoding with the model.
+        """Sampling with the model.
 
         Args:
             src_text (str): the source text to generate the audio from
@@ -61,7 +61,7 @@ class WaveModelInference:
             max_length=self.config.max_seq_length,
         )
 
-        output_ids = self.generation.greedy_decoding(output_ids, mask, encoded_text)
+        output_ids = self.generation.sampling(output_ids, mask, None)
 
         output_ids = output_ids[output_ids != self.config.pad_token_id].reshape(
             1, self.config.num_codebooks, -1
@@ -87,13 +87,9 @@ class WaveModelInference:
 
 
 if __name__ == "__main__":
-    model = WaveModelInference(
-        "lightning_logs/version_247/checkpoints/epoch=13-step=1400.ckpt"
-    )
+    model = WaveModelInference("WAVEAI/gpoto3pc/checkpoints/epoch=0-step=173.ckpt")
 
     text = """ 
-    bass guitar with drums and piano
-        
-    Lyric: 
+    bass guitar with drums and piano 
     """.strip()
-    model.greedy_decoding(text)
+    model.sampling(text)

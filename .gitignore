@@ -164,3 +164,6 @@ cython_debug/
 
 lightning_logs/
 *.wav
+
+checkpoints/
+wandb/

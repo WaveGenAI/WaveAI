@@ -38,7 +38,6 @@ class SynthDataset(Dataset):
         super().__init__()
 
         self.filenames = glob.glob(audio_dir + "/*.mp3")
-
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         self._prompt = prompt

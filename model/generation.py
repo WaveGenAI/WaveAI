@@ -9,25 +9,16 @@ class Generation:
     def beam_search(self, *args, **kwargs):
         raise NotImplementedError
 
-    def greedy_decoding(
+    def sampling(
         self,
         inputs_id: torch.Tensor,
         mask: torch.Tensor,
         cross_att_emb: torch.Tensor,
-        repetition_penalty: float = 2,
         temperature: float = 1,
-        top_k: int = 50,
+        top_k: int = 250,
     ) -> torch.Tensor:
         output_ids = inputs_id.clone()
         steps = self.model.config.max_seq_length - self.model.config.num_codebooks
-
-        def apply_repeat_penalty(logits, context, penalty):
-            for i in range(self.model.config.num_codebooks):
-                context_k = context[:, i, :].squeeze(0)
-                for previous_tokens in set(context_k.tolist()):
-                    logits[:, i, previous_tokens - 1] /= penalty
-
-            return logits
 
         def top_k_sampling(logits, k):
             top_k_logits, _ = torch.topk(logits, k, dim=-1)
@@ -41,9 +32,6 @@ class Generation:
             next_token_logits = logits[
                 :, :, -1, :
             ]  # shape: [batch_size, num_heads, vocab_size]
-            next_token_logits = apply_repeat_penalty(
-                next_token_logits, input_ids, repetition_penalty
-            )
 
             next_token_logits = top_k_sampling(next_token_logits, top_k)
 

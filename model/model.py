@@ -20,6 +20,7 @@ class WaveAILightning(L.LightningModule):
         self.config = Config()
         self._use_prompt = use_prompt
         self.model = WaveAI(self.config)
+        self.save_hyperparameters()
 
     def training_step(self, batch, batch_idx):
         tgt_audio = batch[0]
@@ -62,8 +63,7 @@ class WaveAILightning(L.LightningModule):
 
         loss = loss / self.config.num_codebooks
 
-        print(f"Loss: {loss}")
-        self.log("train_loss", loss)
+        self.log("train_loss", loss, on_step=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -106,8 +106,18 @@ class WaveAILightning(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = optim.AdamW(self.parameters(), lr=1e-4)
-        scheduler = lr_scheduler.LinearLR(
-            optimizer, start_factor=1, end_factor=1e-6, total_iters=10
+        optimizer = optim.AdamW(
+            self.parameters(), lr=1e-3, betas=(0.9, 0.95), weight_decay=0.1
         )
-        return [optimizer], [{"scheduler": scheduler, "interval": "epoch"}]
+        # scheduler = lr_scheduler.CosineAnnealingLR(
+        #     optimizer, T_max=self.trainer.estimated_stepping_batches, eta_min=1e-6
+        # )
+        scheduler = lr_scheduler.LinearLR(
+            optimizer,
+            start_factor=1,
+            end_factor=1e-6,
+            total_iters=self.trainer.estimated_stepping_batches,
+        )
+        return [optimizer], [
+            {"scheduler": scheduler, "interval": "step", "monitor": "val_loss"}
+        ]

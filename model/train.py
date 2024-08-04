@@ -7,6 +7,7 @@ import torch
 import torch.multiprocessing as mp
 from lightning.pytorch.callbacks import LearningRateMonitor
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
+from lightning.pytorch.loggers import WandbLogger
 from loader import SynthDataset
 from torch.utils.data import DataLoader, random_split
 
@@ -36,7 +37,7 @@ train_loader = DataLoader(
     batch_size=4,
     shuffle=True,
     collate_fn=dataset.collate_fn,
-    num_workers=10,
+    num_workers=5,
     persistent_workers=True,
 )
 valid_loader = DataLoader(
@@ -44,17 +45,25 @@ valid_loader = DataLoader(
     batch_size=4,
     shuffle=False,
     collate_fn=dataset.collate_fn,
-    num_workers=10,
+    num_workers=1,
     persistent_workers=True,
 )
 
+wandb_logger = WandbLogger(project="WAVEAI")
 trainer = L.Trainer(
-    limit_train_batches=100,
-    max_epochs=100,
+    max_epochs=10,
     callbacks=[lr_monitor, EarlyStopping(monitor="val_loss", mode="min")],
+    accumulate_grad_batches=7,
+    gradient_clip_val=1,
+    precision="bf16-mixed",
+    logger=wandb_logger,
+    log_every_n_steps=1,
+    default_root_dir="checkpoints",
 )
 
 if __name__ == "__main__":
     trainer.fit(
-        model=model, train_dataloaders=train_loader, val_dataloaders=valid_loader
+        model=model,
+        train_dataloaders=train_loader,
+        val_dataloaders=valid_loader,
     )
