@@ -27,13 +27,13 @@ train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
 train_loader = DataLoader(
     train_dataset,
-    batch_size=12,
+    batch_size=4,
     shuffle=True,
     collate_fn=dataset.collate_fn,
 )
 valid_loader = DataLoader(
     test_dataset,
-    batch_size=12,
+    batch_size=4,
     shuffle=False,
     collate_fn=dataset.collate_fn,
 )

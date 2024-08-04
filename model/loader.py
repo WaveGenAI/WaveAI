@@ -118,7 +118,7 @@ class SynthDataset(Dataset):
         audio_reprs = torch.stack(audio_reprs).squeeze(1)
 
         if not self._prompt:
-            return audio_reprs
+            return audio_reprs, None
 
         text_latent = self.text_encoder(text_reprs)
 
