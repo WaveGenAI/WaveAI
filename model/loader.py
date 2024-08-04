@@ -3,6 +3,7 @@ Module to load the audio dataset.
 """
 
 import glob
+import random
 
 import audio_autoencoder
 import text_encoder
@@ -95,7 +96,13 @@ class SynthDataset(Dataset):
         if audio.shape[-1] < (self._duration * self._sample_rate):
             audio = audio.zero_pad_to(self._duration * self._sample_rate)
         else:
-            audio = audio[:, :, : self._duration * self._sample_rate]
+            # random crop
+            start_idx = random.randint(
+                0, audio.shape[-1] - self._duration * self._sample_rate
+            )
+            audio = audio[
+                :, :, start_idx : start_idx + self._duration * self._sample_rate
+            ]
 
         with torch.no_grad():
             discret_audio_repr = self.audio_codec.compress(audio)
