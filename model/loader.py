@@ -46,13 +46,17 @@ class SynthDataset(Dataset):
         self._sample_rate = sample_rate
 
         audio_codec_path = audio_autoencoder.utils.download(model_type="44khz")
-        self.audio_codec = audio_autoencoder.DAC.load(audio_codec_path)
+
+        with torch.no_grad():  # fix serialize error
+            self.audio_codec = audio_autoencoder.DAC.load(audio_codec_path).eval()
         self.audio_codec.to(self.device)
 
         for param in self.audio_codec.parameters():
             param.requires_grad = False
 
-        self.text_encoder = text_encoder.T5EncoderBaseModel(max_length=max_length)
+        self.text_encoder = text_encoder.T5EncoderBaseModel(
+            max_length=max_length
+        ).eval()
         self.text_encoder.to(self.device)
 
         for param in self.text_encoder.parameters():
@@ -93,8 +97,9 @@ class SynthDataset(Dataset):
         else:
             audio = audio[:, :, : self._duration * self._sample_rate]
 
-        discret_audio_repr = self.audio_codec.compress(audio)
-        discret_audio_repr = discret_audio_repr.codes.to(self.device)
+        with torch.no_grad():
+            discret_audio_repr = self.audio_codec.compress(audio)
+            discret_audio_repr = discret_audio_repr.codes.to(self.device)
 
         if not self._prompt:
             return (discret_audio_repr, None)
@@ -120,6 +125,7 @@ class SynthDataset(Dataset):
         if not self._prompt:
             return audio_reprs, None
 
-        text_latent = self.text_encoder(text_reprs)
+        with torch.no_grad():
+            text_latent = self.text_encoder(text_reprs)
 
         return audio_reprs, text_latent
