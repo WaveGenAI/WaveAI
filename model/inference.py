@@ -6,10 +6,8 @@ import audio_autoencoder
 import text_encoder
 import torch
 from audiotools import AudioSignal
-from config import Config
 from generation import Generation
-
-from model import WaveAILightning
+from lightning_model import WaveAILightning
 
 
 class WaveModelInference:
@@ -19,8 +17,6 @@ class WaveModelInference:
 
     def __init__(self, path: str = None):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-
-        self.config = Config()
 
         self.model = WaveAILightning()
         if path is not None:
@@ -71,20 +67,20 @@ class WaveModelInference:
         encoded_text = encoded_text.to(self.device)
 
         input_ids = input_ids[
-            :, :, : self.config.max_seq_length - self.config.num_codebooks
+            :, :, : self.model.config.max_seq_length - self.model.config.num_codebooks
         ]
 
         _, mask = self.model.build_delay_pattern_mask(
             input_ids,
-            pad_token_id=self.config.pad_token_id,
-            max_length=self.config.max_seq_length,
+            pad_token_id=self.model.config.pad_token_id,
+            max_length=self.model.config.max_seq_length,
         )
 
         output_ids = self.generation.sampling(mask, None, input_ids)
         output_ids = self.model.apply_delay_pattern_mask(output_ids, mask)
 
-        output_ids = output_ids[output_ids != self.config.pad_token_id].reshape(
-            1, self.config.num_codebooks, -1
+        output_ids = output_ids[output_ids != self.model.config.pad_token_id].reshape(
+            1, self.model.config.num_codebooks, -1
         )
 
         # append the frame dimension back to the audio codes
@@ -107,7 +103,7 @@ class WaveModelInference:
 
 
 if __name__ == "__main__":
-    model = WaveModelInference("WAVEAI/ha388fe4/checkpoints/epoch=0-step=173.ckpt")
+    model = WaveModelInference("WAVEAI/mlaplbhw/checkpoints/epoch=0-step=689.ckpt")
 
     text = """ 
     bass guitar with drums and piano 

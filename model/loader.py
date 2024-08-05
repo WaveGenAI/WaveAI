@@ -78,7 +78,7 @@ class SynthDataset(Dataset):
             index (int): Index of the waveform to fetch.
 
         Returns:
-            tuple: A tuple containing the discret representation of the audio and the latent representation of the text.
+            tuple: A tuple containing the discret representation of the audio, the padding mask and the latent representation of the text.
         """
 
         audio_file = self.filenames[index]
@@ -90,6 +90,8 @@ class SynthDataset(Dataset):
 
         if self._mono:
             audio = audio.to_mono()
+
+        audio_duration_before_padding = audio.shape[-1]
 
         # normalize the audio length
         if audio.shape[-1] < (self._duration * self._sample_rate):
@@ -105,15 +107,26 @@ class SynthDataset(Dataset):
 
         with torch.no_grad():
             discret_audio_repr = self.audio_codec.compress(audio)
+
+            # TODO: calculte with padding applied in compress method
+            token_by_audio = audio.shape[-1] // discret_audio_repr.codes.size(-1)
+
+            padding_pos = audio_duration_before_padding // token_by_audio
+
+            padding_mask = torch.ones_like(discret_audio_repr.codes)
+            padding_mask[:, :, padding_pos:] = 0
+
+            padding_mask = padding_mask[:, 0, :]
+
             discret_audio_repr = discret_audio_repr.codes.to(self.device)
 
         if not self._prompt:
-            return (discret_audio_repr, None)
+            return discret_audio_repr, padding_mask, None
 
         with open(audio_file.replace(".mp3", ".txt"), encoding="utf-8") as f:
             prompt = f.read()
 
-        return (discret_audio_repr, prompt)
+        return discret_audio_repr, padding_mask, prompt
 
     def collate_fn(self, batch: list) -> tuple:
         """Collates the batch.
@@ -125,13 +138,14 @@ class SynthDataset(Dataset):
             tuple: A tuple containing the audio and text latent representations.
         """
 
-        audio_reprs, text_reprs = zip(*batch)
+        audio_reprs, padding_mask, text_reprs = zip(*batch)
         audio_reprs = torch.stack(audio_reprs).squeeze(1)
+        padding_mask = torch.stack(padding_mask).squeeze(1)
 
         if not self._prompt:
-            return audio_reprs, None
+            return audio_reprs, padding_mask, None
 
         with torch.no_grad():
             text_latent = self.text_encoder(text_reprs)
 
-        return audio_reprs, text_latent
+        return audio_reprs, padding_mask, text_latent

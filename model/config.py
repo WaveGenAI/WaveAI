@@ -17,6 +17,7 @@ class Config:
         max_seq_length: int = 1000,
         decoder_depth: int = 8,
         decoder_heads: int = 8,
+        cross_att: bool = False,
         **kwargs,
     ):
         """Initialize the configuration class for the model
@@ -29,6 +30,7 @@ class Config:
             max_seq_length (int, optional): the maximum sequence length to generate. Defaults to 30_000.
             decoder_depth (int, optional): the number of decoder layers. Defaults to 4.
             decoder_heads (int, optional): the number of heads in the decoder. Defaults to 8.
+            cross_att (bool, optional): enable cross attention. Defaults to False.
             **kwargs: additional arguments
         """
         self.num_codebooks = num_codebooks
@@ -38,7 +40,7 @@ class Config:
         self.max_seq_length = max_seq_length
         self.decoder_depth = decoder_depth
         self.decoder_heads = decoder_heads
-
+        self.cross_att = cross_att
         self.pad_token_id = codebook_size
 
         for key, value in kwargs.items():

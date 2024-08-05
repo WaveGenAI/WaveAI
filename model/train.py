@@ -8,10 +8,9 @@ import torch.multiprocessing as mp
 from lightning.pytorch.callbacks import LearningRateMonitor
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import WandbLogger
+from lightning_model import WaveAILightning
 from loader import SynthDataset
 from torch.utils.data import DataLoader, random_split
-
-from model import WaveAILightning
 
 lr_monitor = LearningRateMonitor(logging_interval="step")
 
@@ -34,7 +33,7 @@ train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
 train_loader = DataLoader(
     train_dataset,
-    batch_size=4,
+    batch_size=1,
     shuffle=True,
     collate_fn=dataset.collate_fn,
     num_workers=4,
