@@ -18,10 +18,9 @@ class WaveAIDecoder(nn.Module):
             dim=self.config.hidden_size,
             depth=self.config.decoder_depth,
             heads=self.config.decoder_heads,
-            cross_attend=True,  # enable cross-attention
-            attn_dropout=0.1,
-            ff_dropout=0.1,
+            cross_attend=False,  # enable cross-attention
             attn_flash=True,
+            rotary_pos_emb=True,
         )
 
         self.lm_heads = nn.ModuleList(
@@ -61,10 +60,7 @@ class WaveAIDecoder(nn.Module):
             )  # project the cross-attention embedding to the model hidden size
 
         # Pass the input embeddings through the x-transformer decoder with the cross-attention embeddings
-        hidden_space = self.transformer_decoder(
-            x=input_embds,
-            context=cross_att_embs,
-        )
+        hidden_space = self.transformer_decoder(x=input_embds)
 
         # each head predicts a codebook
         lm_logits = torch.stack(

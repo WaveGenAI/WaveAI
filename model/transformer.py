@@ -4,7 +4,6 @@ Class for the main model (music generation)
 
 import torch
 import torch.nn as nn
-
 from blocks.decoder import WaveAIDecoder
 from layers.positional_encoding import PositionalEncoding
 
@@ -116,8 +115,6 @@ class WaveAI(nn.Module):
         seq_len = input_ids.shape[-1]
         decoder_pad_token_mask = decoder_pad_token_mask[..., :seq_len]
 
-        input_ids = input_ids[..., : decoder_pad_token_mask.shape[-1]]
-
         input_ids = torch.where(
             decoder_pad_token_mask == -1, input_ids, decoder_pad_token_mask
         )
@@ -162,7 +159,7 @@ class WaveAI(nn.Module):
         # sum the embeddings of each codebook idx
         inputs_embed = sum(inputs_embed)  # dim: (batch_size, length, hidden_size)
 
-        inputs_embed = self.position_embedding(inputs_embed)
+        # inputs_embed = self.position_embedding(inputs_embed)
 
         # pass the embeddings through the decoder
         logits = self.decoder(inputs_embed, cross_att_emb)
