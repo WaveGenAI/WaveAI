@@ -36,7 +36,7 @@ train_loader = DataLoader(
     batch_size=4,
     shuffle=True,
     collate_fn=dataset.collate_fn,
-    num_workers=2,
+    num_workers=1,
     persistent_workers=True,
 )
 valid_loader = DataLoader(

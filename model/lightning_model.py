@@ -26,40 +26,28 @@ class WaveAILightning(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         tgt_audio = batch[0]
-        padding_mask = batch[1]
 
         if self.config.cross_att:
-            src_text = batch[2]
-
-        decoder_input_ids_start = self.model.prepare_inputs_for_generation(
-            batch[0].size(0)
-        ).to(tgt_audio.device)
-
-        tgt_audio = torch.cat((decoder_input_ids_start, tgt_audio), dim=-1)
+            src_text = batch[1]
 
         # cut the audio to the max length (including the codebooks because of the delay pattern)
-        tgt_audio = tgt_audio[
-            :, :, : self.config.max_seq_length - self.config.num_codebooks
-        ]
+        tgt_audio = tgt_audio[:, :, : self.config.max_seq_length]
 
-        padding_mask = torch.cat(
-            (torch.ones_like(decoder_input_ids_start)[:, 0], padding_mask),
-            dim=-1,
-        )
-
-        padding_mask = padding_mask[..., : tgt_audio.size(-1)]
-
-        inputs_id, _ = self.delay_pattern.build_delay_pattern_mask(
+        labels, delay_pattern_mask = self.delay_pattern.build_delay_pattern_mask(
             tgt_audio,
             pad_token_id=self.config.pad_token_id,
-            max_length=self.config.max_seq_length,
+            max_length=self.config.max_seq_length + self.config.num_codebooks,
+        )
+        labels = self.delay_pattern.apply_delay_pattern_mask(labels, delay_pattern_mask)
+        labels = labels[..., 1:]
+
+        input_ids = self.model.shift_tokens_right(
+            labels, self.config.pad_token_id, self.config.pad_token_id
         )
 
-        labels = inputs_id.detach().clone()
+        print(input_ids.shape, labels.shape)
 
-        logits = self.model(
-            inputs_id, padding_mask, src_text if self.config.cross_att else None
-        )
+        logits = self.model(input_ids, src_text if self.config.cross_att else None)
 
         loss = torch.zeros([])
 
@@ -87,28 +75,26 @@ class WaveAILightning(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         tgt_audio = batch[0]
-        padding_mask = batch[1]
 
         if self.config.cross_att:
-            src_text = batch[2]
+            src_text = batch[1]
 
         # cut the audio to the max length (including the codebooks because of the delay pattern)
         tgt_audio = tgt_audio[
-            :, :, : self.config.max_seq_length - self.config.num_codebooks + 1
+            :, :, : self.config.max_seq_length - self.config.num_codebooks
         ]
-        padding_mask = padding_mask[..., : tgt_audio.size(-1)]
 
-        inputs_id, _ = self.delay_pattern.build_delay_pattern_mask(
+        labels, _ = self.delay_pattern.build_delay_pattern_mask(
             tgt_audio,
             pad_token_id=self.config.pad_token_id,
             max_length=self.config.max_seq_length,
         )
 
-        labels = inputs_id.detach().clone()
-
-        logits = self.model(
-            inputs_id, padding_mask, src_text if self.config.cross_att else None
+        input_ids = self.model.shift_tokens_right(
+            labels, self.config.pad_token_id, self.config.pad_token_id
         )
+
+        logits = self.model(input_ids, src_text if self.config.cross_att else None)
 
         loss = torch.zeros([])
 
@@ -121,6 +107,11 @@ class WaveAILightning(L.LightningModule):
                 logits[:, codebook, ...].contiguous().view(-1, logits.size(-1))
             )  # [B x T, prob]
             targets_k = labels[:, codebook, ...].contiguous().view(-1)  # [B x T]
+
+            # get index of the most probable token
+            #  max_prob_idx = logits_k.argmax(dim=-1)
+
+            # print(targets_k, max_prob_idx)
 
             loss += loss_fn(logits_k.cpu(), targets_k.cpu())
 

@@ -36,7 +36,6 @@ class WaveAIDecoder(nn.Module):
     def forward(
         self,
         input_embds: torch.Tensor,
-        padding_mask: torch.Tensor,
         cross_att_embs: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Forward pass through the model
@@ -44,7 +43,6 @@ class WaveAIDecoder(nn.Module):
         Args:
             input_embds (torch.tensor): a tensor representing the input embeddings of shape
                 (batch_size, length, hidden_size)
-            padding_mask (torch.tensor): a tensor representing the padding mask of the input embeddings
             cross_att_embs (torch.tensor | None): a tensor representing the cross-attention embedding of the prompt
         Returns:
             torch.tensor: a tensor representing the prob for each codebook idx
@@ -62,10 +60,8 @@ class WaveAIDecoder(nn.Module):
                 cross_att_embs
             )  # project the cross-attention embedding to the model hidden size
 
-        padding_mask = padding_mask.bool()
-
         # Pass the input embeddings through the x-transformer decoder with the cross-attention embeddings
-        hidden_space = self.transformer_decoder(x=input_embds, mask=padding_mask)
+        hidden_space = self.transformer_decoder(x=input_embds, context=cross_att_embs)
 
         # each head predicts a codebook
         lm_logits = torch.stack(

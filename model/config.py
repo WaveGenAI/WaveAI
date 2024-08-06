@@ -17,7 +17,7 @@ class Config:
         max_seq_length: int = 1000,
         decoder_depth: int = 8,
         decoder_heads: int = 8,
-        cross_att: bool = False,
+        cross_att: bool = True,
         **kwargs,
     ):
         """Initialize the configuration class for the model
