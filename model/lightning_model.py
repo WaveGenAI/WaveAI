@@ -1,11 +1,12 @@
 import lightning as L
 import torch
-from .config import Config
 from torch import optim
 from torch.nn import CrossEntropyLoss
 from torch.optim import lr_scheduler
 
+from .config import Config
 from .model import WaveAI
+from .pattern import DelayPattern
 
 
 class WaveAILightning(L.LightningModule):
@@ -19,6 +20,7 @@ class WaveAILightning(L.LightningModule):
         super().__init__()
 
         self.config = Config()
+        self.delay_pattern = DelayPattern(self.config.num_codebooks)
         self.model = WaveAI(self.config)
         self.save_hyperparameters()
 
@@ -29,13 +31,25 @@ class WaveAILightning(L.LightningModule):
         if self.config.cross_att:
             src_text = batch[2]
 
+        decoder_input_ids_start = self.model.prepare_inputs_for_generation(
+            batch[0].size(0)
+        ).to(tgt_audio.device)
+
+        tgt_audio = torch.cat((decoder_input_ids_start, tgt_audio), dim=-1)
+
         # cut the audio to the max length (including the codebooks because of the delay pattern)
         tgt_audio = tgt_audio[
-            :, :, : self.config.max_seq_length - self.config.num_codebooks + 1
+            :, :, : self.config.max_seq_length - self.config.num_codebooks
         ]
+
+        padding_mask = torch.cat(
+            (torch.ones_like(decoder_input_ids_start)[:, 0], padding_mask),
+            dim=-1,
+        )
+
         padding_mask = padding_mask[..., : tgt_audio.size(-1)]
 
-        inputs_id, _ = self.model.build_delay_pattern_mask(
+        inputs_id, _ = self.delay_pattern.build_delay_pattern_mask(
             tgt_audio,
             pad_token_id=self.config.pad_token_id,
             max_length=self.config.max_seq_length,
@@ -60,7 +74,7 @@ class WaveAILightning(L.LightningModule):
             targets_k = labels[:, codebook, ...].contiguous().view(-1)  # [B x T]
 
             # get index of the most probable token
-            max_prob_idx = logits_k.argmax(dim=-1)
+            #  max_prob_idx = logits_k.argmax(dim=-1)
 
             # print(targets_k, max_prob_idx)
 
@@ -84,7 +98,7 @@ class WaveAILightning(L.LightningModule):
         ]
         padding_mask = padding_mask[..., : tgt_audio.size(-1)]
 
-        inputs_id, _ = self.model.build_delay_pattern_mask(
+        inputs_id, _ = self.delay_pattern.build_delay_pattern_mask(
             tgt_audio,
             pad_token_id=self.config.pad_token_id,
             max_length=self.config.max_seq_length,

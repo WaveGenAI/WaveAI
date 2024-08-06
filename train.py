@@ -33,10 +33,10 @@ train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
 train_loader = DataLoader(
     train_dataset,
-    batch_size=1,
+    batch_size=4,
     shuffle=True,
     collate_fn=dataset.collate_fn,
-    num_workers=4,
+    num_workers=1,
     persistent_workers=True,
 )
 valid_loader = DataLoader(
