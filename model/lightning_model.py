@@ -45,8 +45,6 @@ class WaveAILightning(L.LightningModule):
             labels, self.config.pad_token_id, self.config.pad_token_id
         )
 
-        print(input_ids.shape, labels.shape)
-
         logits = self.model(input_ids, src_text if self.config.cross_att else None)
 
         loss = torch.zeros([])
@@ -62,7 +60,7 @@ class WaveAILightning(L.LightningModule):
             targets_k = labels[:, codebook, ...].contiguous().view(-1)  # [B x T]
 
             # get index of the most probable token
-            #  max_prob_idx = logits_k.argmax(dim=-1)
+            max_prob_idx = logits_k.argmax(dim=-1)
 
             # print(targets_k, max_prob_idx)
 
@@ -122,7 +120,7 @@ class WaveAILightning(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(
-            self.parameters(), lr=1e-3, betas=(0.9, 0.95), weight_decay=0.1
+            self.parameters(), lr=1e-5, betas=(0.9, 0.95), weight_decay=0.1
         )
         scheduler = lr_scheduler.CosineAnnealingLR(
             optimizer, T_max=self.trainer.estimated_stepping_batches, eta_min=1e-6

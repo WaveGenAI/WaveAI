@@ -104,11 +104,9 @@ class SynthDataset(Dataset):
 
         with torch.no_grad():
             discret_audio_repr = self.audio_codec.compress(audio)
-            discret_audio_repr = discret_audio_repr.codes.to(self.device)
-
-            discret_audio_repr = discret_audio_repr[
-                ..., : random.randint(10, 3000)
-            ].transpose(0, -1)
+            discret_audio_repr = discret_audio_repr.codes.transpose(0, -1).to(
+                self.device
+            )
 
         if not self._prompt:
             return discret_audio_repr, None

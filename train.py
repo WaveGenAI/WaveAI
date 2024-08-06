@@ -53,10 +53,11 @@ trainer = L.Trainer(
     max_epochs=10,
     callbacks=[lr_monitor, EarlyStopping(monitor="val_loss", mode="min")],
     accumulate_grad_batches=7,
-    gradient_clip_val=1,
+    gradient_clip_val=2,
     logger=wandb_logger,
     log_every_n_steps=1,
     default_root_dir="checkpoints",
+    precision="16-mixed",
 )
 
 if __name__ == "__main__":
