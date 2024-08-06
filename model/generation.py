@@ -1,22 +1,30 @@
 import torch
 import torch.nn.functional as F
 
+from model.pattern import DelayPattern
+
 
 class Generation:
     def __init__(self, model: torch.nn.Module):
         self.model = model
+        self.pattern = DelayPattern(self.model.config.num_codebooks)
 
     def beam_search(self, *args, **kwargs):
         raise NotImplementedError
 
     def sampling(
         self,
-        mask: torch.Tensor,
         cross_att_emb: torch.Tensor,
-        inputs_ids: torch.Tensor = None,
+        input_ids: torch.Tensor,
         temperature: float = 1,
         top_k: int = 250,
     ) -> torch.Tensor:
+
+        _, mask = self.pattern.build_delay_pattern_mask(
+            input_ids,
+            pad_token_id=self.model.config.pad_token_id,
+            max_length=self.model.config.max_seq_length,
+        )
 
         output_ids = self.model.prepare_inputs_for_generation().to(mask.device)
 
@@ -25,7 +33,7 @@ class Generation:
         for i in range(steps):
             padding_mask = torch.ones_like(output_ids)[:, 0, :]
 
-            inputs_ids_pred = self.model.apply_delay_pattern_mask(output_ids, mask)
+            inputs_ids_pred = self.pattern.apply_delay_pattern_mask(output_ids, mask)
 
             logits = self.model(inputs_ids_pred, padding_mask, cross_att_emb)
             last_toks_logits = logits[
@@ -45,5 +53,7 @@ class Generation:
             output_ids = torch.cat((output_ids, item_next[None, ...]), dim=-1)
 
             print(f"Step {i + 1} / {steps}", end="\r")
+
+        output_ids = self.pattern.apply_delay_pattern_mask(output_ids, mask)
 
         return output_ids

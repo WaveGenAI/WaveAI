@@ -71,14 +71,7 @@ class WaveModelInference:
             :, :, : self.model.config.max_seq_length - self.model.config.num_codebooks
         ]
 
-        _, mask = self.model.build_delay_pattern_mask(
-            input_ids,
-            pad_token_id=self.model.config.pad_token_id,
-            max_length=self.model.config.max_seq_length,
-        )
-
-        output_ids = self.generation.sampling(mask, None, input_ids)
-        output_ids = self.model.apply_delay_pattern_mask(output_ids, mask)
+        output_ids = self.generation.sampling(None, input_ids)
 
         output_ids = output_ids[output_ids != self.model.config.pad_token_id].reshape(
             1, self.model.config.num_codebooks, -1
@@ -104,7 +97,7 @@ class WaveModelInference:
 
 
 if __name__ == "__main__":
-    model = WaveModelInference()
+    model = WaveModelInference("WAVEAI/euq1sykg/checkpoints/epoch=1-step=346.ckpt")
 
     text = """ 
     bass guitar with drums and piano 
