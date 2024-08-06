@@ -2,12 +2,13 @@
 Code for inference with the model.
 """
 
-import audio_autoencoder
-import text_encoder
 import torch
 from audiotools import AudioSignal
-from generation import Generation
-from lightning_model import WaveAILightning
+
+import model.audio_autoencoder as audio_autoencoder
+import model.text_encoder as text_encoder
+from model.generation import Generation
+from model.lightning_model import WaveAILightning
 
 
 class WaveModelInference:
@@ -109,8 +110,9 @@ if __name__ == "__main__":
     bass guitar with drums and piano 
     """.strip()
 
-    from loader import SynthDataset
     from torch.utils.data import DataLoader
+
+    from model.loader import SynthDataset
 
     dataset = SynthDataset(audio_dir="/media/works/waveai_music/")
     train_loader = DataLoader(

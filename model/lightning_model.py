@@ -1,11 +1,11 @@
 import lightning as L
 import torch
-from config import Config
+from .config import Config
 from torch import optim
 from torch.nn import CrossEntropyLoss
 from torch.optim import lr_scheduler
 
-from model import WaveAI
+from .model import WaveAI
 
 
 class WaveAILightning(L.LightningModule):

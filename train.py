@@ -8,8 +8,8 @@ import torch.multiprocessing as mp
 from lightning.pytorch.callbacks import LearningRateMonitor
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import WandbLogger
-from lightning_model import WaveAILightning
-from loader import SynthDataset
+from model.lightning_model import WaveAILightning
+from model.loader import SynthDataset
 from torch.utils.data import DataLoader, random_split
 
 lr_monitor = LearningRateMonitor(logging_interval="step")

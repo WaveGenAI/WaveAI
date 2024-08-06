@@ -3,7 +3,7 @@ from pathlib import Path
 import argbind
 from audiotools import ml
 
-import audio_autoencoder as dac
+import model.audio_autoencoder as dac
 
 DAC = dac.model.DAC
 Accelerator = ml.Accelerator

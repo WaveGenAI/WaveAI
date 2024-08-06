@@ -18,9 +18,8 @@ class WaveAIDecoder(nn.Module):
             dim=self.config.hidden_size,
             depth=self.config.decoder_depth,
             heads=self.config.decoder_heads,
-            cross_attend=False,  # enable cross-attention
+            cross_attend=self.config.cross_att,  # enable cross-attention
             attn_flash=True,
-            rotary_pos_emb=True,
         )
 
         self.lm_heads = nn.ModuleList(

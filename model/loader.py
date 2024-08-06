@@ -5,11 +5,12 @@ Module to load the audio dataset.
 import glob
 import random
 
-import audio_autoencoder
-import text_encoder
 import torch
 from audiotools import AudioSignal
 from torch.utils.data import Dataset
+
+import model.audio_autoencoder as audio_autoencoder
+import model.text_encoder as text_encoder
 
 
 class SynthDataset(Dataset):
