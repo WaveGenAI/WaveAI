@@ -62,9 +62,12 @@ class WaveAI(nn.Module):
             torch.tensor: a tensor that represent the logits prob
         """
 
+        shifted_input_ids = torch.full_like(input_ids, self.config.pad_token_id)
+        shifted_input_ids[:, :, 1:] = input_ids[:, :, :-1]
+
         # embed the codebook idx
         inputs_embed = [
-            self.embedding_layers[codebook_idx](input_ids[:, codebook_idx])
+            self.embedding_layers[codebook_idx](shifted_input_ids[:, codebook_idx])
             for codebook_idx in range(self.config.num_codebooks)
         ]
 

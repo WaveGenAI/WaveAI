@@ -1,5 +1,10 @@
+""" 
+Decoder block
+"""
+
 import torch
 import torch.nn as nn
+from x_transformers import Decoder
 
 
 class WaveAIDecoder(nn.Module):
@@ -9,16 +14,12 @@ class WaveAIDecoder(nn.Module):
         super().__init__()
         self.config = config
 
-        decoder_layer = nn.TransformerDecoderLayer(
-            d_model=self.config.hidden_size,
-            nhead=self.config.decoder_heads,
-            dim_feedforward=4 * self.config.hidden_size,  # typically 4x the hidden size
-            dropout=0.1,  # You might want to make this configurable
-            batch_first=True,
-        )
-
-        self.transformer_decoder = nn.TransformerDecoder(
-            decoder_layer, num_layers=self.config.decoder_depth
+        self.transformer_decoder = Decoder(
+            dim=self.config.hidden_size,
+            depth=self.config.decoder_depth,
+            heads=self.config.decoder_heads,
+            cross_attend=self.config.cross_att,  # enable cross-attention
+            attn_flash=True,
         )
 
         self.lm_heads = nn.ModuleList(
@@ -39,6 +40,7 @@ class WaveAIDecoder(nn.Module):
         cross_att_embs: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Forward pass through the model
+
         Args:
             input_embds (torch.tensor): a tensor representing the input embeddings of shape
                 (batch_size, length, hidden_size)
@@ -47,6 +49,7 @@ class WaveAIDecoder(nn.Module):
         Returns:
             torch.tensor: a tensor representing the prob for each codebook idx
         """
+
         if cross_att_embs is None:
             cross_att_embs = torch.zeros(
                 input_embds.size(0),
@@ -56,24 +59,13 @@ class WaveAIDecoder(nn.Module):
 
         if cross_att_embs.size(-1) != self.config.hidden_size:
             cross_att_embs = self.cross_embd_proj(
-                cross_att_embs.float()
+                cross_att_embs
             )  # project the cross-attention embedding to the model hidden size
 
-        # Convert padding_mask to attention mask
-        attention_mask = ~padding_mask.bool()
+        padding_mask = padding_mask.bool()
 
-        # PyTorch's TransformerDecoder expects the target sequence mask to be of shape (sequence_length, sequence_length)
-        tgt_mask = nn.Transformer.generate_square_subsequent_mask(
-            input_embds.size(1)
-        ).to(input_embds.device)
-
-        # Pass the input embeddings through the PyTorch TransformerDecoder with the cross-attention embeddings
-        hidden_space = self.transformer_decoder(
-            tgt=input_embds,
-            memory=cross_att_embs,
-            tgt_mask=tgt_mask,
-            tgt_key_padding_mask=attention_mask,
-        )
+        # Pass the input embeddings through the x-transformer decoder with the cross-attention embeddings
+        hidden_space = self.transformer_decoder(x=input_embds, mask=padding_mask)
 
         # each head predicts a codebook
         lm_logits = torch.stack(
