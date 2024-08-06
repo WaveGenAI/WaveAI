@@ -104,7 +104,7 @@ class WaveModelInference:
 
 
 if __name__ == "__main__":
-    model = WaveModelInference("WAVEAI/mlaplbhw/checkpoints/epoch=0-step=689.ckpt")
+    model = WaveModelInference()
 
     text = """ 
     bass guitar with drums and piano 

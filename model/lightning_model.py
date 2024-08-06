@@ -90,7 +90,7 @@ class WaveAILightning(L.LightningModule):
         padding_mask = batch[1]
 
         if self.config.cross_att:
-            src_text = batch[1]
+            src_text = batch[2]
 
         # cut the audio to the max length (including the codebooks because of the delay pattern)
         tgt_audio = tgt_audio[
@@ -133,15 +133,10 @@ class WaveAILightning(L.LightningModule):
         optimizer = optim.AdamW(
             self.parameters(), lr=1e-3, betas=(0.9, 0.95), weight_decay=0.1
         )
-        # scheduler = lr_scheduler.CosineAnnealingLR(
-        #     optimizer, T_max=self.trainer.estimated_stepping_batches, eta_min=1e-6
-        # )
-        scheduler = lr_scheduler.LinearLR(
-            optimizer,
-            start_factor=1,
-            end_factor=1e-6,
-            total_iters=self.trainer.estimated_stepping_batches,
+        scheduler = lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=self.trainer.estimated_stepping_batches, eta_min=1e-6
         )
+
         return [optimizer], [
             {"scheduler": scheduler, "interval": "step", "monitor": "val_loss"}
         ]
