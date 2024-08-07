@@ -27,7 +27,7 @@ class PositionalEncoding(nn.Module):
         pe[0, :, 0::2] = torch.sin(pos / divid)
         pe[0, :, 1::2] = torch.cos(pos / divid)
 
-        self.__pe = pe
+        self._pe = pe
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         """A method that adds the positional encoding to the input tensor
@@ -39,4 +39,5 @@ class PositionalEncoding(nn.Module):
             torch.Tensor: the input tensor with the positional encoding
         """
 
-        return inputs + self.__pe[:, : inputs.shape[1], :].to(inputs.device)
+        self._pe = self._pe.to(inputs.device)
+        return inputs + self._pe[:, : inputs.shape[1], :]

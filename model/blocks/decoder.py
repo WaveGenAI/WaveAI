@@ -48,14 +48,10 @@ class WaveAIDecoder(nn.Module):
             torch.tensor: a tensor representing the prob for each codebook idx
         """
 
-        if cross_att_embs is None:
-            cross_att_embs = torch.zeros(
-                input_embds.size(0),
-                input_embds.size(1),
-                self.config.cross_att_hidden_size,
-            ).to(input_embds.device)
-
-        if cross_att_embs.size(-1) != self.config.hidden_size:
+        if (
+            cross_att_embs is not None
+            and cross_att_embs.size(-1) != self.config.hidden_size
+        ):
             cross_att_embs = self.cross_embd_proj(
                 cross_att_embs
             )  # project the cross-attention embedding to the model hidden size
