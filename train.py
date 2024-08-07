@@ -8,11 +8,14 @@ import torch.multiprocessing as mp
 from lightning.pytorch.callbacks import LearningRateMonitor
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import WandbLogger
-from model.lightning_model import WaveAILightning
-from model.loader import SynthDataset
 from torch.utils.data import DataLoader, random_split
 
+from model.config import Config
+from model.lightning_model import WaveAILightning
+from model.loader import SynthDataset
+
 lr_monitor = LearningRateMonitor(logging_interval="step")
+config = Config()
 
 torch.set_float32_matmul_precision("medium")
 # torch.set_printoptions(threshold=10000)
@@ -24,7 +27,9 @@ except RuntimeError:
 
 model = WaveAILightning()
 
-dataset = SynthDataset(audio_dir="/media/works/audio/", duration=15)
+dataset = SynthDataset(
+    audio_dir="/media/works/audio/", duration=15, prompt=config.cross_att
+)
 
 test_size = min(int(0.1 * len(dataset)), 200)
 train_size = len(dataset) - test_size
@@ -50,13 +55,14 @@ valid_loader = DataLoader(
 
 wandb_logger = WandbLogger(project="WAVEAI")
 trainer = L.Trainer(
-    max_epochs=30,
+    max_epochs=10,
     callbacks=[lr_monitor, EarlyStopping(monitor="val_loss", mode="min")],
     accumulate_grad_batches=7,
     gradient_clip_val=2,
     logger=wandb_logger,
     log_every_n_steps=1,
     default_root_dir="checkpoints",
+    precision="16-mixed",
 )
 
 if __name__ == "__main__":

@@ -42,16 +42,13 @@ class WaveAILightning(L.LightningModule):
             max_length=self.config.max_seq_length + self.config.num_codebooks,
         )
         labels = self.delay_pattern.apply_delay_pattern_mask(labels, delay_pattern_mask)
+        labels = labels[..., 1:]
 
-        # labels = labels[..., 1:]
+        input_ids = self.model.shift_tokens_right(
+            labels, self.config.pad_token_id, self.config.pad_token_id
+        )
 
-        # input_ids = self.model.shift_tokens_right(
-        #     labels, self.config.pad_token_id, self.config.pad_token_id
-        # )
-
-        inputs_ids = labels.masked_fill_(labels == -100, self.config.pad_token_id)
-
-        logits = self.model(inputs_ids, src_text)
+        logits = self.model(input_ids, src_text)
 
         # ignore the pad token (when pytorch see -100 in the labels it will ignore it)
         labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
@@ -67,6 +64,7 @@ class WaveAILightning(L.LightningModule):
 
             # get index of the most probable token
             # max_prob_idx = logits_k.argmax(dim=-1)
+            # print(targets_k[..., 10:20], max_prob_idx[..., 10:20])
 
             loss += loss_fn(logits_k, targets_k)
 
@@ -93,16 +91,13 @@ class WaveAILightning(L.LightningModule):
             max_length=self.config.max_seq_length + self.config.num_codebooks,
         )
         labels = self.delay_pattern.apply_delay_pattern_mask(labels, delay_pattern_mask)
+        labels = labels[..., 1:]
 
-        # labels = labels[..., 1:]
+        input_ids = self.model.shift_tokens_right(
+            labels, self.config.pad_token_id, self.config.pad_token_id
+        )
 
-        # input_ids = self.model.shift_tokens_right(
-        #     labels, self.config.pad_token_id, self.config.pad_token_id
-        # )
-
-        inputs_ids = labels.masked_fill_(labels == -100, self.config.pad_token_id)
-
-        logits = self.model(inputs_ids, src_text)
+        logits = self.model(input_ids, src_text)
 
         # ignore the pad token (when pytorch see -100 in the labels it will ignore it)
         labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
@@ -118,6 +113,7 @@ class WaveAILightning(L.LightningModule):
 
             # get index of the most probable token
             # max_prob_idx = logits_k.argmax(dim=-1)
+            # print(targets_k[..., 10:20], max_prob_idx[..., 10:20])
 
             loss += loss_fn(logits_k, targets_k)
 

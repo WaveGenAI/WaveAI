@@ -39,6 +39,16 @@ class SynthDataset(Dataset):
         super().__init__()
 
         self.filenames = glob.glob(audio_dir + "/*.mp3")
+        txt_filenames = glob.glob(audio_dir + "/*.txt")
+
+        if prompt:
+            # remove all file names that do not have a corresponding text file
+            self.filenames = [
+                file_name
+                for file_name in self.filenames
+                if file_name.replace(".mp3", ".txt") in txt_filenames
+            ]
+
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         self._prompt = prompt
