@@ -42,20 +42,23 @@ class WaveAILightning(L.LightningModule):
             max_length=self.config.max_seq_length + self.config.num_codebooks,
         )
         labels = self.delay_pattern.apply_delay_pattern_mask(labels, delay_pattern_mask)
-        labels = labels[..., 1:]
 
-        input_ids = self.model.shift_tokens_right(
-            labels, self.config.pad_token_id, self.config.pad_token_id
-        )
+        # labels = labels[..., 1:]
 
-        logits = self.model(labels, src_text)
+        # input_ids = self.model.shift_tokens_right(
+        #     labels, self.config.pad_token_id, self.config.pad_token_id
+        # )
 
-        loss = torch.zeros([])
+        inputs_ids = labels.masked_fill_(labels == -100, self.config.pad_token_id)
+
+        logits = self.model(inputs_ids, src_text)
 
         # ignore the pad token (when pytorch see -100 in the labels it will ignore it)
         labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
 
+        loss = torch.zeros([], device=self.device)
         loss_fn = CrossEntropyLoss()
+
         for codebook in range(self.config.num_codebooks):
             logits_k = (
                 logits[:, codebook, ...].contiguous().view(-1, logits.size(-1))
@@ -63,11 +66,9 @@ class WaveAILightning(L.LightningModule):
             targets_k = labels[:, codebook, ...].contiguous().view(-1)  # [B x T]
 
             # get index of the most probable token
-            max_prob_idx = logits_k.argmax(dim=-1)
+            # max_prob_idx = logits_k.argmax(dim=-1)
 
-            print(targets_k, max_prob_idx)
-
-            loss += loss_fn(logits_k.cpu(), targets_k.cpu())
+            loss += loss_fn(logits_k, targets_k)
 
         loss = loss / self.config.num_codebooks
 
@@ -76,9 +77,12 @@ class WaveAILightning(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         tgt_audio = batch[0]
+        src_text = batch[1]
 
         if self.config.cross_att:
-            src_text = batch[1]
+            src_text = src_text.to(self.device)
+
+        tgt_audio = tgt_audio.to(self.device)
 
         # cut the audio to the max length (including the codebooks because of the delay pattern)
         tgt_audio = tgt_audio[:, :, : self.config.max_seq_length]
@@ -89,20 +93,23 @@ class WaveAILightning(L.LightningModule):
             max_length=self.config.max_seq_length + self.config.num_codebooks,
         )
         labels = self.delay_pattern.apply_delay_pattern_mask(labels, delay_pattern_mask)
-        labels = labels[..., 1:]
 
-        input_ids = self.model.shift_tokens_right(
-            labels, self.config.pad_token_id, self.config.pad_token_id
-        )
+        # labels = labels[..., 1:]
 
-        logits = self.model(input_ids, src_text if self.config.cross_att else None)
+        # input_ids = self.model.shift_tokens_right(
+        #     labels, self.config.pad_token_id, self.config.pad_token_id
+        # )
 
-        loss = torch.zeros([])
+        inputs_ids = labels.masked_fill_(labels == -100, self.config.pad_token_id)
+
+        logits = self.model(inputs_ids, src_text)
 
         # ignore the pad token (when pytorch see -100 in the labels it will ignore it)
         labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
 
+        loss = torch.zeros([], device=self.device)
         loss_fn = CrossEntropyLoss()
+
         for codebook in range(self.config.num_codebooks):
             logits_k = (
                 logits[:, codebook, ...].contiguous().view(-1, logits.size(-1))
@@ -112,7 +119,7 @@ class WaveAILightning(L.LightningModule):
             # get index of the most probable token
             # max_prob_idx = logits_k.argmax(dim=-1)
 
-            loss += loss_fn(logits_k.cpu(), targets_k.cpu())
+            loss += loss_fn(logits_k, targets_k)
 
         loss = loss / self.config.num_codebooks
 
