@@ -11,12 +11,8 @@ class DelayPattern:
     This is used to predict the next token in the sequence
     """
 
-    def __init__(self, nq: int):
-        self.nq = nq
-
-    def build_delay_pattern_mask(
-        self, input_ids: torch.LongTensor, pad_token_id: int, max_length: int = None
-    ):
+    @staticmethod
+    def build_delay_pattern_mask(input_ids: torch.LongTensor, pad_token_id: int):
         """Build a delayed pattern mask to the input_ids. Each codebook is offset by the previous codebook by
         one, giving a delayed pattern mask at the start of sequence and end of sequence. Take the example where there
         are 4 codebooks and a max sequence length of 8, we have the delayed pattern mask of shape `(codebooks,
@@ -35,63 +31,16 @@ class DelayPattern:
         where a-h indicate the input prompt (decoder input ids) that are offset by 1. Now, we only override the -1
         tokens in our prediction.
         """
-        # (bsz * num_codebooks, seq_len) -> (bsz, num_codebooks, seq_len)
-        input_ids = input_ids.reshape(-1, self.nq, input_ids.shape[-1])
-
-        bsz, num_codebooks, seq_len = input_ids.shape
-
-        input_ids_shifted = (
-            torch.ones(
-                (bsz, num_codebooks, max_length),
-                dtype=torch.long,
-                device=input_ids.device,
-            )
-            * -1
+        b, k, seq_len = input_ids.shape
+        delays_ids = torch.full(
+            (b, k, seq_len + (k - 1)), pad_token_id, dtype=torch.long
         )
 
-        channel_codebooks = num_codebooks
-        # we only apply the mask if we have a large enough seq len - otherwise we return as is
-        if max_length < 2 * channel_codebooks - 1:
-            return input_ids.reshape(
-                bsz * num_codebooks, -1
-            ), input_ids_shifted.reshape(bsz * num_codebooks, -1)
+        for k_idx in range(k):
+            delays_ids[:, k_idx, k_idx : seq_len + k_idx] = input_ids[:, k_idx, :]
 
-        # fill the shifted ids with the prompt entries, offset by the codebook idx
-        for codebook in range(channel_codebooks):
-            # mono channel - loop over the codebooks one-by-one
-            input_ids_shifted[:, codebook, codebook : seq_len + codebook] = input_ids[
-                :, codebook
-            ]
-
-        # construct a pattern mask that indicates the positions of padding tokens for each codebook
-        # first fill the upper triangular part (the EOS padding)
-        delay_pattern = torch.triu(
-            torch.ones((channel_codebooks, max_length), dtype=torch.bool),
-            diagonal=max_length - channel_codebooks + 1,
-        )
-        # then fill the lower triangular part (the BOS padding)
-        delay_pattern = delay_pattern + torch.tril(
-            torch.ones((channel_codebooks, max_length), dtype=torch.bool)
-        )
-
-        mask = ~delay_pattern.to(input_ids.device)
-        input_ids = mask * input_ids_shifted + ~mask * pad_token_id
-
-        # find the first position to start generating - this is the first place we have the -1 token
-        # and will always be in the first codebook (since it has no codebook offset)
-        first_codebook_ids = input_ids[:, 0, :]
-        start_ids = (first_codebook_ids == -1).nonzero()[:, 1]
-
-        if len(start_ids) > 0:
-            first_start_id = min(start_ids)
-        else:
-            # we have no tokens that need to be filled - return entire matrix of input ids
-            first_start_id = seq_len
-
-        # (bsz * num_codebooks, seq_len) -> (bsz, num_codebooks, seq_len)
-        pattern_mask = input_ids
-        input_ids = input_ids[..., :first_start_id]
-        return input_ids, pattern_mask
+        mask = torch.where(delays_ids == pad_token_id, pad_token_id, -1)
+        return delays_ids[..., :seq_len], mask[..., :seq_len]
 
     @staticmethod
     def apply_delay_pattern_mask(input_ids, decoder_pad_token_mask):
@@ -105,3 +54,44 @@ class DelayPattern:
             decoder_pad_token_mask == -1, input_ids, decoder_pad_token_mask
         )
         return input_ids
+
+    @staticmethod
+    def shift_tokens_right(
+        inputs_ids_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int
+    ):
+        """
+        Shift input ids one token to the right.
+        """
+        # transpose to get (bsz, num_codebooks, seq_len)
+        # inputs_ids_ids = inputs_ids_ids.transpose(1, 2)
+        shifted_inputs_ids_ids = inputs_ids_ids.new_zeros(inputs_ids_ids.shape)
+        shifted_inputs_ids_ids[..., 1:] = inputs_ids_ids[..., :-1].clone()
+        if decoder_start_token_id is None:
+            raise ValueError(
+                "Make sure to set the decoder_start_token_id attribute of the model's configuration."
+            )
+        shifted_inputs_ids_ids[..., 0] = decoder_start_token_id
+
+        if pad_token_id is None:
+            raise ValueError(
+                "Make sure to set the pad_token_id attribute of the model's configuration."
+            )
+        # replace possible -100 values in labels by `pad_token_id`
+        shifted_inputs_ids_ids.masked_fill_(
+            shifted_inputs_ids_ids == -100, pad_token_id
+        )
+
+        return shifted_inputs_ids_ids
+
+    def reverse_delay_pattern_mask(self, input_ids):
+        """Reverse the delay pattern mask to the input_ids. This is used to predict the next token in the sequence"""
+        b, k, seq_len = input_ids.shape
+
+        delays_ids = torch.full((b, k, seq_len - (k - 1)), 0, dtype=torch.long)
+
+        for k_idx in range(k):
+            delays_ids[:, k_idx, :] = input_ids[
+                :, k_idx, k_idx : seq_len - (k - 1) + k_idx
+            ]
+
+        return delays_ids

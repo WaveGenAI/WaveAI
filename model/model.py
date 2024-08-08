@@ -57,57 +57,33 @@ class WaveAI(nn.Module):
             torch.Tensor: a tensor that represent the initial input for the decoder
         """
 
-        decoder_input_ids_start = (
+        decoder_inputs_ids_ids_start = (
             torch.ones((batch_size, self.config.num_codebooks, 1), dtype=torch.long)
             * self.config.pad_token_id
         )
 
-        return decoder_input_ids_start
-
-    @staticmethod
-    def shift_tokens_right(
-        input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int
-    ):
-        """
-        Shift input ids one token to the right.
-        """
-        # transpose to get (bsz, num_codebooks, seq_len)
-        # input_ids = input_ids.transpose(1, 2)
-        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-        if decoder_start_token_id is None:
-            raise ValueError(
-                "Make sure to set the decoder_start_token_id attribute of the model's configuration."
-            )
-        shifted_input_ids[..., 0] = decoder_start_token_id
-
-        if pad_token_id is None:
-            raise ValueError(
-                "Make sure to set the pad_token_id attribute of the model's configuration."
-            )
-        # replace possible -100 values in labels by `pad_token_id`
-        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-        return shifted_input_ids
+        return decoder_inputs_ids_ids_start
 
     def forward(
-        self, input_ids: torch.Tensor, cross_att_emb: torch.Tensor = None, **kwargs
+        self, inputs_ids: torch.Tensor, cross_att_emb: torch.Tensor = None, **kwargs
     ) -> torch.tensor:
         """Forward pass through the model
 
         Args:
-            input_ids (torch.tensor): a tensor that represent the codebook idx of shape
+            inputs_ids (torch.tensor): a tensor that represent the codebook idx of shape
                 (batch_size, num_codebooks, length)
             cross_att_emb (torch.tensor | None): a tensor that represent the cross attention embedding of the prompt
         Returns:
             torch.tensor: a tensor that represent the logits prob
         """
 
-        input_ids = input_ids.masked_fill(input_ids == -100, self.config.pad_token_id)
+        inputs_ids = inputs_ids.masked_fill(
+            inputs_ids == -100, self.config.pad_token_id
+        )
 
         x = {}
         for k in range(self.config.num_codebooks):
-            x[k] = input_ids[:, k, :]
+            x[k] = inputs_ids[:, k, :]
 
         # pass the embeddings through the decoder
         hidden_space = self.decoder(x)
