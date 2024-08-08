@@ -33,4 +33,4 @@ class Encodec(AutoEncoder):
 
     def decode(self, z: Tensor) -> Tensor:
         with torch.no_grad():
-            return self.model.decode(z)
+            return self.model.decode([[z, None]])

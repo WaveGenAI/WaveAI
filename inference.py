@@ -5,8 +5,8 @@ Code for inference with the model.
 import torch
 from audiotools import AudioSignal
 
-import model.audio_autoencoder as audio_autoencoder
 import model.text_encoder as text_encoder
+from model.audio_autoencoder import Encodec as audio_autoencoder
 from model.generation import Generation
 from model.lightning_model import WaveAILightning
 
@@ -28,8 +28,7 @@ class WaveModelInference:
 
         self.text_encoder = text_encoder.T5EncoderBaseModel(max_length=512)
 
-        audio_codec_path = audio_autoencoder.utils.download(model_type="44khz")
-        self.audio_codec = audio_autoencoder.DAC.load(audio_codec_path)
+        self.audio_codec = audio_autoencoder(device=self.device)
 
         self.generation = Generation(self.model)
 
@@ -45,21 +44,6 @@ class WaveModelInference:
             input_ids (torch.Tensor, optional): the input ids to start the generation from. Defaults to None.
         """
 
-        if input_ids is not None:
-            z = self.audio_codec.quantizer.from_codes(input_ids.cpu())[0]
-
-            y = torch.tensor([])
-
-            with torch.no_grad():
-                for i in range(0, z.shape[2], 200):
-                    z_bis = z[:, :, i : i + 200]
-
-                    y_bis = self.audio_codec.decode(z_bis)
-                    y = torch.cat((y, y_bis), dim=-1)
-
-            y = AudioSignal(y.numpy(), sample_rate=44100)
-            y.write("output_bis.wav")
-
         if isinstance(src_text, str):
             encoded_text = self.text_encoder([src_text])
         else:
@@ -67,11 +51,9 @@ class WaveModelInference:
 
         encoded_text = encoded_text.to(self.device)
 
-        input_ids = input_ids[
-            :, :, : self.model.config.max_seq_length - self.model.config.num_codebooks
-        ]
+        input_ids = input_ids[:, :, : self.model.config.max_seq_length]
 
-        output_ids = self.generation.sampling(None, input_ids, top_k=10)
+        output_ids = self.generation.sampling(None, input_ids)
 
         output_ids = output_ids[output_ids != self.model.config.pad_token_id].reshape(
             1, self.model.config.num_codebooks, -1
@@ -80,24 +62,22 @@ class WaveModelInference:
         # append the frame dimension back to the audio codes
         output_ids = output_ids[None, ...].squeeze(0)
 
-        z = self.audio_codec.quantizer.from_codes(output_ids.cpu())[0]
-
-        y = torch.tensor([])
+        y = torch.tensor([], device=self.device)
 
         with torch.no_grad():
-            for i in range(0, z.shape[2], 200):
-                print(f"Decoding {i} / {z.shape[2]}", end="\r")
-                z_bis = z[:, :, i : i + 200]
+            for i in range(0, output_ids.shape[-1], 200):
+                print(f"Decoding {i} / {output_ids.shape[2]}", end="\r")
+                z_bis = output_ids[:, :, i : i + 200]
 
                 y_bis = self.audio_codec.decode(z_bis)
                 y = torch.cat((y, y_bis), dim=-1)
 
-        y = AudioSignal(y.numpy(), sample_rate=44100)
+        y = AudioSignal(y.cpu().numpy(), sample_rate=44100)
         y.write("output.wav")
 
 
 if __name__ == "__main__":
-    model = WaveModelInference("epoch=13-step=364.ckpt")
+    model = WaveModelInference("epoch=5-step=1038.ckpt")
 
     text = """ 
     bass guitar with drums and piano 

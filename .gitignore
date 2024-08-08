@@ -167,3 +167,4 @@ lightning_logs/
 
 checkpoints/
 wandb/
+*.ckpt

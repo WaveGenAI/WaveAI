@@ -20,18 +20,15 @@ class Generation:
         top_k: int = 250,
     ) -> torch.Tensor:
 
-        _, mask = self.pattern.build_delay_pattern_mask(
+        output_ids, mask = self.pattern.build_delay_pattern_mask(
             input_ids,
             pad_token_id=self.model.config.pad_token_id,
             max_length=self.model.config.max_seq_length,
         )
 
-        output_ids = self.model.prepare_inputs_for_generation().to(mask.device)
-
         steps = self.model.config.max_seq_length - output_ids.size(-1)
 
         for i in range(steps):
-
             inputs_ids_pred = self.pattern.apply_delay_pattern_mask(output_ids, mask)
 
             logits = self.model(inputs_ids_pred)

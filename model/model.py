@@ -4,9 +4,7 @@ Class for the main model (music generation)
 
 import torch
 import torch.nn as nn
-
-from .blocks.decoder import WaveAIDecoder
-from .layers.positional_encoding import PositionalEncoding
+from x_transformers import Decoder, MultiInputTransformerWrapper
 
 
 class WaveAI(nn.Module):
@@ -23,9 +21,30 @@ class WaveAI(nn.Module):
             ]
         )  # each codebook has his own embedding layer
 
-        self.decoder = WaveAIDecoder(self.config)
-        self.position_embedding = PositionalEncoding(
-            self.config.hidden_size, self.config.max_seq_length
+        embds = {
+            k: self.config.codebook_size + 1 for k in range(self.config.num_codebooks)
+        }
+
+        self.decoder = MultiInputTransformerWrapper(
+            num_tokens=embds,
+            max_seq_len=self.config.max_seq_length,
+            return_only_embed=True,
+            attn_layers=Decoder(
+                dim=self.config.hidden_size,
+                depth=self.config.decoder_depth,
+                heads=self.config.decoder_heads,
+                cross_attend=self.config.cross_att,  # cross-attention state
+                attn_flash=True,
+                rotary_pos_emb=True,
+            ),
+        )
+
+        # each head predicts a codebook (not its index)
+        self.lm_heads = nn.ModuleList(
+            [
+                nn.Linear(self.config.hidden_size, self.config.codebook_size)
+                for _ in range(self.config.num_codebooks)
+            ]
         )
 
     def prepare_inputs_for_generation(self, batch_size: int = 1) -> torch.Tensor:
@@ -84,18 +103,17 @@ class WaveAI(nn.Module):
             torch.tensor: a tensor that represent the logits prob
         """
 
-        # embed the codebook idx
-        inputs_embed = [
-            self.embedding_layers[codebook_idx](input_ids[:, codebook_idx])
-            for codebook_idx in range(self.config.num_codebooks)
-        ]
+        input_ids = input_ids.masked_fill(input_ids == -100, self.config.pad_token_id)
 
-        # sum the embeddings of each codebook idx
-        inputs_embed = sum(inputs_embed)  # dim: (batch_size, length, hidden_size)
-
-        inputs_embed = self.position_embedding(inputs_embed)
+        x = {}
+        for k in range(self.config.num_codebooks):
+            x[k] = input_ids[:, k, :]
 
         # pass the embeddings through the decoder
-        logits = self.decoder(inputs_embed, cross_att_emb)
+        hidden_space = self.decoder(x)
+
+        logits = torch.stack(
+            [lm_head(hidden_space) for lm_head in self.lm_heads], dim=1
+        )
 
         return logits
