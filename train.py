@@ -38,15 +38,15 @@ train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
 train_loader = DataLoader(
     train_dataset,
-    batch_size=4,
+    batch_size=2,
     shuffle=True,
     collate_fn=dataset.collate_fn,
-    num_workers=3,
+    num_workers=1,
     persistent_workers=True,
 )
 valid_loader = DataLoader(
     test_dataset,
-    batch_size=4,
+    batch_size=2,
     shuffle=False,
     collate_fn=dataset.collate_fn,
     num_workers=1,
@@ -58,7 +58,7 @@ wandb_logger = WandbLogger(project="WAVEAI")
 trainer = L.Trainer(
     max_epochs=10,
     callbacks=[lr_monitor, EarlyStopping(monitor="val_loss", mode="min")],
-    accumulate_grad_batches=7,
+    accumulate_grad_batches=14,
     gradient_clip_val=2,
     logger=wandb_logger,
     log_every_n_steps=1,
