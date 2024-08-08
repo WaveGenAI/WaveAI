@@ -19,3 +19,6 @@ tensorboard
 numba>=0.5.7
 jupyterlab
 lightning
+
+encodec
+descript-audio-codec

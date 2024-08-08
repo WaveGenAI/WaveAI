@@ -9,8 +9,8 @@ import torch
 from audiotools import AudioSignal
 from torch.utils.data import Dataset
 
-import model.audio_autoencoder as audio_autoencoder
 import model.text_encoder as text_encoder
+from model.audio_autoencoder import Encodec as audio_autoencoder
 
 
 class SynthDataset(Dataset):
@@ -56,14 +56,8 @@ class SynthDataset(Dataset):
         self._duration = duration
         self._sample_rate = sample_rate
 
-        audio_codec_path = audio_autoencoder.utils.download(model_type="44khz")
-
-        with torch.no_grad():  # fix serialize error
-            self.audio_codec = audio_autoencoder.DAC.load(audio_codec_path).eval()
-        self.audio_codec.to(self.device)
-
-        for param in self.audio_codec.parameters():
-            param.requires_grad = False
+        with torch.no_grad():
+            self.audio_codec = audio_autoencoder(self.device)
 
         self.text_encoder = text_encoder.T5EncoderBaseModel(
             max_length=max_length
@@ -112,11 +106,8 @@ class SynthDataset(Dataset):
                 :, :, start_idx : start_idx + self._duration * self._sample_rate
             ]
 
-        with torch.no_grad():
-            discret_audio_repr = self.audio_codec.compress(audio)
-            discret_audio_repr = discret_audio_repr.codes.transpose(0, -1).to(
-                self.device
-            )
+        discret_audio_repr = self.audio_codec.encode(audio.audio_data.to(self.device))
+        discret_audio_repr = discret_audio_repr.transpose(0, -1).to(self.device)
 
         if not self._prompt:
             return discret_audio_repr, None

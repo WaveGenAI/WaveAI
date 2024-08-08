@@ -54,6 +54,7 @@ valid_loader = DataLoader(
 )
 
 wandb_logger = WandbLogger(project="WAVEAI")
+
 trainer = L.Trainer(
     max_epochs=10,
     callbacks=[lr_monitor, EarlyStopping(monitor="val_loss", mode="min")],
@@ -64,6 +65,7 @@ trainer = L.Trainer(
     default_root_dir="checkpoints",
     precision="16-mixed",
 )
+
 
 if __name__ == "__main__":
     trainer.fit(

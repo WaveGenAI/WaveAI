@@ -71,7 +71,7 @@ class WaveModelInference:
             :, :, : self.model.config.max_seq_length - self.model.config.num_codebooks
         ]
 
-        output_ids = self.generation.sampling(None, input_ids)
+        output_ids = self.generation.sampling(None, input_ids, top_k=10)
 
         output_ids = output_ids[output_ids != self.model.config.pad_token_id].reshape(
             1, self.model.config.num_codebooks, -1
@@ -97,7 +97,7 @@ class WaveModelInference:
 
 
 if __name__ == "__main__":
-    model = WaveModelInference("WAVEAI/euq1sykg/checkpoints/epoch=1-step=346.ckpt")
+    model = WaveModelInference("epoch=13-step=364.ckpt")
 
     text = """ 
     bass guitar with drums and piano 

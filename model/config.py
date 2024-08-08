@@ -10,14 +10,14 @@ class Config:
 
     def __init__(
         self,
-        num_codebooks: int = 9,
-        codebook_size: int = 1024,
+        num_codebooks: int = 8,
+        codebook_size: int = 2048,
         hidden_size: int = 1024,
         cross_att_hidden_size: int = 512,
         max_seq_length: int = 1000,
         decoder_depth: int = 8,
         decoder_heads: int = 8,
-        cross_att: bool = True,
+        cross_att: bool = False,
         **kwargs,
     ):
         """Initialize the configuration class for the model

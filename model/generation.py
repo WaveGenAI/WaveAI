@@ -31,11 +31,10 @@ class Generation:
         steps = self.model.config.max_seq_length - output_ids.size(-1)
 
         for i in range(steps):
-            padding_mask = torch.ones_like(output_ids)[:, 0, :]
 
             inputs_ids_pred = self.pattern.apply_delay_pattern_mask(output_ids, mask)
 
-            logits = self.model(inputs_ids_pred, padding_mask, cross_att_emb)
+            logits = self.model(inputs_ids_pred)
             last_toks_logits = logits[
                 :, :, -1, :
             ]  # shape: [batch_size, num_heads, vocab_size]
