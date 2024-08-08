@@ -57,7 +57,7 @@ class SynthDataset(Dataset):
         self._sample_rate = sample_rate
 
         with torch.no_grad():
-            self.audio_codec = audio_autoencoder(self.device)
+            self.audio_codec = audio_autoencoder(self.device, bandwidth=3.0)
 
         self.text_encoder = text_encoder.T5EncoderBaseModel(
             max_length=max_length

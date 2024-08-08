@@ -10,7 +10,7 @@ class Config:
 
     def __init__(
         self,
-        num_codebooks: int = 8,
+        num_codebooks: int = 4,
         codebook_size: int = 2048,
         hidden_size: int = 1024,
         cross_att_hidden_size: int = 512,

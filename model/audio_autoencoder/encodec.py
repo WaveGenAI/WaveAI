@@ -12,7 +12,7 @@ from .autoencoder import AutoEncoder
 class Encodec(AutoEncoder):
     """Encodec model for audio compression."""
 
-    def __init__(self, device: torch.device, bandwidth: float = 6.0):
+    def __init__(self, device: torch.device, bandwidth: float = 6.0, *args, **kwargs):
         self.model = EncodecModel.encodec_model_24khz()
         self.model.set_target_bandwidth(bandwidth)
 

@@ -12,7 +12,7 @@ from .autoencoder import AutoEncoder
 class DAC(AutoEncoder):
     """DAC model for audio compression."""
 
-    def __init__(self, device: torch.device):
+    def __init__(self, device: torch.device, *args, **kwargs):
         model_path = dac.utils.download(model_type="44khz")
         self.model = dac.DAC.load(model_path)
         self.model.to(device)

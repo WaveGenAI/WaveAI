@@ -36,16 +36,16 @@ class WaveAILightning(L.LightningModule):
         # cut the audio to the max length (including the codebooks because of the delay pattern)
         tgt_audio = tgt_audio[:, :, : self.config.max_seq_length]
 
-        inputs_ids, _ = self.delay_pattern.build_delay_pattern_mask(
+        inputs, _ = self.delay_pattern.build_delay_pattern_mask(
             tgt_audio, self.config.pad_token_id
         )
 
-        inputs_ids = self.delay_pattern.shift_tokens_right(
-            inputs_ids, self.config.pad_token_id, self.config.pad_token_id
-        )
+        inputs = self.delay_pattern.shift_tokens_right(
+            inputs, self.config.pad_token_id, self.config.pad_token_id
+        ).to(self.device)
 
-        inputs_ids = inputs_ids[..., :-1].to(self.device)
-        labels = tgt_audio[..., 1:].to(self.device)
+        inputs_ids = inputs[..., :-1]
+        labels = inputs[..., 1:]
 
         logits = self.model(inputs_ids, src_text)
 
