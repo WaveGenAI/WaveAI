@@ -168,3 +168,8 @@ lightning_logs/
 checkpoints/
 wandb/
 *.ckpt
+.data/
+.data copy/
+*.mp3
+
+pretrained/

@@ -3,10 +3,29 @@ import torch
 from torch import optim
 from torch.nn import CrossEntropyLoss
 from torch.optim import lr_scheduler
+from torchmetrics import Metric
 
 from .config import Config
 from .model import WaveAI
 from .pattern import DelayPattern
+
+
+class LossTensor(Metric):
+    """
+    Loss with accumulation of gradients.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.add_state("loss", torch.tensor(0, dtype=torch.float))
+        self.add_state("counter", torch.tensor(0, dtype=torch.float))
+
+    def update(self, loss):
+        self.loss += loss
+        self.counter += 1
+
+    def compute(self):
+        return self.loss / self.counter
 
 
 class WaveAILightning(L.LightningModule):
@@ -24,6 +43,8 @@ class WaveAILightning(L.LightningModule):
         self.model = WaveAI(self.config)
         self.save_hyperparameters()
 
+        self.loss_metric = LossTensor()
+
     def step(self, batch, batch_idx) -> torch.Tensor:
         tgt_audio = batch[0]
         src_text = batch[1]
@@ -33,11 +54,11 @@ class WaveAILightning(L.LightningModule):
 
         tgt_audio = tgt_audio.to(self.device)
 
-        # cut the audio to the max length (including the codebooks because of the delay pattern)
+        # cut the audio to the max length
         tgt_audio = tgt_audio[:, :, : self.config.max_seq_length]
 
         inputs, _ = self.delay_pattern.build_delay_pattern_mask(
-            tgt_audio, self.config.pad_token_id
+            tgt_audio, self.config.pad_token_id, self.config.max_seq_length
         )
 
         inputs = self.delay_pattern.shift_tokens_right(
@@ -75,6 +96,12 @@ class WaveAILightning(L.LightningModule):
         loss = self.step(batch, batch_idx)
 
         self.log("train_loss", loss, on_step=True)
+        self.loss_metric(loss)
+
+        if not self.trainer.fit_loop._should_accumulate():
+            self.log("Accumulate loss", self.loss_metric.compute())
+            self.loss_metric.reset()
+
         return loss
 
     def validation_step(self, batch, batch_idx):

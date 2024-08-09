@@ -28,7 +28,11 @@ except RuntimeError:
 model = WaveAILightning()
 
 dataset = SynthDataset(
-    audio_dir="/media/works/audio/", duration=15, prompt=config.cross_att
+    audio_dir="/media/works/audio/",
+    save_dir="./.data",
+    duration=30,
+    prompt=config.cross_att,
+    overwrite=False,
 )
 
 test_size = min(int(0.1 * len(dataset)), 200)
@@ -38,18 +42,18 @@ train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
 train_loader = DataLoader(
     train_dataset,
-    batch_size=2,
+    batch_size=1,
     shuffle=True,
     collate_fn=dataset.collate_fn,
-    num_workers=1,
+    num_workers=4,
     persistent_workers=True,
 )
 valid_loader = DataLoader(
     test_dataset,
-    batch_size=2,
+    batch_size=1,
     shuffle=False,
     collate_fn=dataset.collate_fn,
-    num_workers=1,
+    num_workers=4,
     persistent_workers=True,
 )
 
@@ -58,8 +62,8 @@ wandb_logger = WandbLogger(project="WAVEAI")
 trainer = L.Trainer(
     max_epochs=10,
     callbacks=[lr_monitor, EarlyStopping(monitor="val_loss", mode="min")],
-    accumulate_grad_batches=14,
-    gradient_clip_val=2,
+    accumulate_grad_batches=50,
+    gradient_clip_val=1,
     logger=wandb_logger,
     log_every_n_steps=1,
     default_root_dir="checkpoints",

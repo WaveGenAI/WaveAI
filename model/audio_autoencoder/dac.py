@@ -34,3 +34,6 @@ class DAC(AutoEncoder):
     def decode(self, z: Tensor) -> Tensor:
         with torch.no_grad():
             return self.model.decode(z)
+
+    def sample_rate(self):
+        return self.model.sample_rate

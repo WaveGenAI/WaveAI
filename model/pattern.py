@@ -12,7 +12,9 @@ class DelayPattern:
     """
 
     @staticmethod
-    def build_delay_pattern_mask(input_ids: torch.LongTensor, pad_token_id: int):
+    def build_delay_pattern_mask(
+        input_ids: torch.LongTensor, pad_token_id: int, max_seq_length: int
+    ):
         """Build a delayed pattern mask to the input_ids. Each codebook is offset by the previous codebook by
         one, giving a delayed pattern mask at the start of sequence and end of sequence. Take the example where there
         are 4 codebooks and a max sequence length of 8, we have the delayed pattern mask of shape `(codebooks,
@@ -32,15 +34,21 @@ class DelayPattern:
         tokens in our prediction.
         """
         b, k, seq_len = input_ids.shape
+
         delays_ids = torch.full(
-            (b, k, seq_len + (k - 1)), pad_token_id, dtype=torch.long
+            (b, k, max_seq_length + (k - 1)), pad_token_id, dtype=torch.long
         )
+
+        for k_idx in range(k):
+            delays_ids[:, k_idx, k_idx : max_seq_length + k_idx] = torch.full_like(
+                delays_ids[:, k_idx, k_idx : max_seq_length + k_idx], -1
+            )
 
         for k_idx in range(k):
             delays_ids[:, k_idx, k_idx : seq_len + k_idx] = input_ids[:, k_idx, :]
 
         mask = torch.where(delays_ids == pad_token_id, pad_token_id, -1)
-        return delays_ids[..., :seq_len], mask[..., :seq_len]
+        return delays_ids[..., :seq_len], mask
 
     @staticmethod
     def apply_delay_pattern_mask(input_ids, decoder_pad_token_mask):

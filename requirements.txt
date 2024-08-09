@@ -22,3 +22,5 @@ lightning
 
 encodec
 descript-audio-codec
+torchmetrics
+git+https://github.com/WaveGenAI/SemantiCodec-inference.git

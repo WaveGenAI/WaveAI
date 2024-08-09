@@ -36,6 +36,10 @@ class WaveAI(nn.Module):
                 cross_attend=self.config.cross_att,  # cross-attention state
                 attn_flash=True,
                 rotary_pos_emb=True,
+                layer_dropout=0.1,  # stochastic depth - dropout entire layer
+                attn_dropout=0.1,  # dropout post-attention
+                ff_dropout=0.1,  # feedforward dropout
+                use_scalenorm=True,
             ),
         )
 
@@ -46,23 +50,6 @@ class WaveAI(nn.Module):
                 for _ in range(self.config.num_codebooks)
             ]
         )
-
-    def prepare_inputs_for_generation(self, batch_size: int = 1) -> torch.Tensor:
-        """Create the initial input for the decoder
-
-        Args:
-            batch_size (int, optional): the batch size. Defaults to 1.
-
-        Returns:
-            torch.Tensor: a tensor that represent the initial input for the decoder
-        """
-
-        decoder_inputs_ids_ids_start = (
-            torch.ones((batch_size, self.config.num_codebooks, 1), dtype=torch.long)
-            * self.config.pad_token_id
-        )
-
-        return decoder_inputs_ids_ids_start
 
     def forward(
         self, inputs_ids: torch.Tensor, cross_att_emb: torch.Tensor = None, **kwargs

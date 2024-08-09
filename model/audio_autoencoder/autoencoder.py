@@ -71,11 +71,21 @@ class AutoEncoder:
             z (torch.Tensor): codebook input of shape [B, K, T]
 
         Returns:
-            torch.Tensor: audio output of shape [B, 1, T]
+            torch.Tensor: audio output of shape [1, 1, T]
 
         B: batch size
         K: number of codebooks
         T: sequence length
+        """
+
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def sample_rate(self) -> int:
+        """Return the sample rate of the audio.
+
+        Returns:
+            int: the sample rate of the audio
         """
 
         raise NotImplementedError
