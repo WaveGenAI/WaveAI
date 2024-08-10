@@ -19,11 +19,12 @@ class SementicCodec(AutoEncoder):
     def __init__(
         self,
         token_rate=100,
-        semantic_vocab_size=32768,
+        semantic_vocab_size=8192,
         sample_rate=44100,
         *args,
         **kwargs
     ):
+
         self.model = SemantiCodec(
             token_rate=token_rate, semantic_vocab_size=semantic_vocab_size
         )

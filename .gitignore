@@ -168,8 +168,8 @@ lightning_logs/
 checkpoints/
 wandb/
 *.ckpt
-.data/
-.data copy/
+.data*/
+WAVEAI/
 *.mp3
 
 pretrained/

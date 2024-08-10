@@ -104,7 +104,9 @@ class SynthDataset(Dataset):
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        audio_codec = audio_autoencoder(device, bandwidth=3.0, sample_rate=sample_rate)
+        audio_codec = audio_autoencoder(
+            device=device, bandwidth=3.0, sample_rate=sample_rate
+        )
         text_enc = (
             text_encoder.T5EncoderBaseModel(max_length=max_length).eval().to(device)
         )
@@ -114,7 +116,14 @@ class SynthDataset(Dataset):
 
         progress = 0
         for audio_file in filenames:
-            audio = AudioSignal(audio_file, duration=duration if duration > 0 else None)
+            try:
+                audio = AudioSignal(
+                    audio_file, duration=duration if duration > 0 else None
+                )
+            except (EOFError, RuntimeError):
+                print(f"Error processing {audio_file}")
+                continue
+
             audio.resample(sample_rate)
 
             if mono:

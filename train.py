@@ -45,16 +45,14 @@ train_loader = DataLoader(
     batch_size=1,
     shuffle=True,
     collate_fn=dataset.collate_fn,
-    num_workers=4,
-    persistent_workers=True,
+    num_workers=0,
 )
 valid_loader = DataLoader(
     test_dataset,
     batch_size=1,
     shuffle=False,
     collate_fn=dataset.collate_fn,
-    num_workers=4,
-    persistent_workers=True,
+    num_workers=0,
 )
 
 wandb_logger = WandbLogger(project="WAVEAI")

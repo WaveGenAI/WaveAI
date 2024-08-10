@@ -11,10 +11,10 @@ class Config:
     def __init__(
         self,
         num_codebooks: int = 2,
-        codebook_size: int = 32768,
+        codebook_size: int = 8192,
         hidden_size: int = 1024,
         cross_att_hidden_size: int = 512,
-        max_seq_length: int = 1_000,
+        max_seq_length: int = 3100,
         decoder_depth: int = 12,
         decoder_heads: int = 16,
         cross_att: bool = False,
@@ -27,7 +27,7 @@ class Config:
             codebook_size (int, optional): the number of vectors in each codebook. Defaults to 1024.. Defaults to 1024.
             hidden_size (int, optional): the dimension of the hidden_size to convert the index to a vector and process them. Defaults to 1024.
             cross_att_hidden_size (int, optional): the hidden size of the cross attention embedding. Defaults to 768 (T5).
-            max_seq_length (int, optional): the maximum sequence length to generate. Defaults to 5_000.
+            max_seq_length (int, optional): the maximum sequence length to generate. Defaults to 3100.
             decoder_depth (int, optional): the number of decoder layers. Defaults to 4.
             decoder_heads (int, optional): the number of heads in the decoder. Defaults to 8.
             cross_att (bool, optional): enable cross attention. Defaults to True.
