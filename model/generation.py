@@ -24,11 +24,11 @@ class Generation:
 
         output_ids, mask = self.pattern.build_delay_pattern_mask(
             input_ids,
-            pad_token_id=self.model.config.pad_token_id,
-            max_seq_length=self.model.config.max_seq_length,
+            pad_token_id=self.model.config.model.pad_token_id,
+            max_seq_length=self.model.config.model.max_seq_length,
         )
 
-        steps = self.model.config.max_seq_length - output_ids.size(-1)
+        steps = min(1000, self.model.config.model.max_seq_length - output_ids.size(-1))
 
         for i in range(steps):
             inputs_ids_pred = self.pattern.apply_delay_pattern_mask(output_ids, mask)

@@ -4,11 +4,24 @@ Code for inference with the model.
 
 import torch
 from audiotools import AudioSignal
+from torch.utils.data import DataLoader
 
 import model.text_encoder as text_encoder
-from model.audio_autoencoder import SementicCodec as audio_autoencoder
+from model.config import Config
 from model.generation import Generation
 from model.lightning_model import WaveAILightning
+from model.loader import SynthDataset
+
+config = Config()
+
+if config.codec.name == "DAC":
+    from model.audio_autoencoder import DAC as audio_autoencoder
+elif config.codec.name == "Encodec":
+    from model.audio_autoencoder import Encodec as audio_autoencoder
+elif config.codec.name == "SementicCodec":
+    from model.audio_autoencoder import SementicCodec as audio_autoencoder
+else:
+    raise ValueError("Invalid codec")
 
 
 class WaveModelInference:
@@ -18,7 +31,7 @@ class WaveModelInference:
 
     def __init__(self, path: str = None):
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
+        print(f"Using device: {self.device}")
         self.model = WaveAILightning()
         if path is not None:
             self.model = WaveAILightning.load_from_checkpoint(path)
@@ -27,7 +40,13 @@ class WaveModelInference:
         self.model.eval()
 
         self.text_encoder = text_encoder.T5EncoderBaseModel(max_length=512)
-        self.audio_codec = audio_autoencoder(bandwidth=3.0, device=self.device)
+
+        if config.codec.name in config.__dict__.keys():
+            self.audio_codec = audio_autoencoder(
+                device=self.device, **config.__dict__[config.codec.name].__dict__
+            )
+        else:
+            self.audio_codec = audio_autoencoder(device=self.device)
 
         self.generation = Generation(self.model, device=self.device)
 
@@ -50,36 +69,41 @@ class WaveModelInference:
 
         encoded_text = encoded_text.to(self.device)
 
-        input_ids = input_ids[:, :, : self.model.config.max_seq_length]
+        input_ids = input_ids[:, :, : self.model.config.model.max_seq_length]
 
-        output_ids = self.generation.sampling(None, input_ids, top_k=100)
+        output_ids = self.generation.sampling(None, input_ids, top_k=50)
+        output_ids = output_ids[:, :, :]
 
         with torch.no_grad():
-            try:
-                y = self.audio_codec.decompress(output_ids)
-            except NotImplementedError:
-                y = self.audio_codec.decode(output_ids)
+            y = self.audio_codec.decompress(output_ids)
 
         y = AudioSignal(y.cpu().numpy(), sample_rate=self.audio_codec.sample_rate())
         y.write("output.wav")
 
 
-if __name__ == "__main__":
-    model = WaveModelInference("WAVEAI/an8y8dt1/checkpoints/epoch=9-step=970.ckpt")
+model = WaveModelInference(config.inference.checkpoint_path)
 
-    text = """ 
-    bass guitar with drums and piano 
-    """.strip()
+text = """ 
+bass guitar with drums and piano 
+""".strip()
 
-    from torch.utils.data import DataLoader
+codec_args = None
+if config.codec.name in config.__dict__.keys():
+    codec_args = config.__dict__[config.codec.name]
 
-    from model.loader import SynthDataset
+dataset = SynthDataset(
+    audio_dir=config.data.audio_dir,
+    save_dir=config.data.save_dir,
+    duration=config.data.duration,
+    prompt=config.data.prompt,
+    overwrite=False,
+    codec=config.codec.name,
+    config_codec=codec_args,
+)
+train_loader = DataLoader(
+    dataset, batch_size=1, shuffle=True, collate_fn=dataset.collate_fn
+)
 
-    dataset = SynthDataset(audio_dir="/media/works/waveai_music/")
-    train_loader = DataLoader(
-        dataset, batch_size=1, shuffle=True, collate_fn=dataset.collate_fn
-    )
+first_batch = next(iter(train_loader))
 
-    first_batch = next(iter(train_loader))
-
-    model.sampling(text, first_batch[0][..., :200])
+model.sampling(text, first_batch[0][..., :300])

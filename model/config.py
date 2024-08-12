@@ -1,6 +1,4 @@
-"""
-Configuration file for the model
-"""
+import yaml
 
 
 class Config:
@@ -8,46 +6,32 @@ class Config:
     Configuration class for the model
     """
 
-    def __init__(
-        self,
-        num_codebooks: int = 2,
-        codebook_size: int = 8192,
-        hidden_size: int = 1024,
-        cross_att_hidden_size: int = 512,
-        max_seq_length: int = 3100,
-        decoder_depth: int = 12,
-        decoder_heads: int = 16,
-        cross_att: bool = False,
-        **kwargs,
-    ):
-        """Initialize the configuration class for the model
-
-        Args:
-            num_codebooks (int, optional): Number of codebooks to use in the model. Defaults to 9.
-            codebook_size (int, optional): the number of vectors in each codebook. Defaults to 1024.. Defaults to 1024.
-            hidden_size (int, optional): the dimension of the hidden_size to convert the index to a vector and process them. Defaults to 1024.
-            cross_att_hidden_size (int, optional): the hidden size of the cross attention embedding. Defaults to 768 (T5).
-            max_seq_length (int, optional): the maximum sequence length to generate. Defaults to 3100.
-            decoder_depth (int, optional): the number of decoder layers. Defaults to 4.
-            decoder_heads (int, optional): the number of heads in the decoder. Defaults to 8.
-            cross_att (bool, optional): enable cross attention. Defaults to True.
-            **kwargs: additional arguments
-        """
-        self.num_codebooks = num_codebooks
-        self.codebook_size = codebook_size
-        self.hidden_size = hidden_size
-        self.cross_att_hidden_size = cross_att_hidden_size
-        self.max_seq_length = max_seq_length
-        self.decoder_depth = decoder_depth
-        self.decoder_heads = decoder_heads
-        self.cross_att = cross_att
-        self.pad_token_id = codebook_size
-
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+    def __init__(self, settings=None):
+        if settings is not None:
+            self.__dict__.update(self._convert_dict_to_object(settings))
+        else:
+            self.setup()
 
     def __str__(self):
         return str(self.__dict__)
 
     def __repr__(self):
         return str(self.__dict__)
+
+    def setup(self, config_path: str = "config.yaml"):
+        """Setup the configuration by reading yaml file"""
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            settings = yaml.safe_load(f)
+
+        # Recursively update the settings
+        self.__dict__.update(self._convert_dict_to_object(settings))
+
+    def _convert_dict_to_object(self, settings):
+        """
+        Recursively converts a dictionary into an object.
+        """
+        for key, value in settings.items():
+            if isinstance(value, dict):
+                settings[key] = Config(value)
+        return settings

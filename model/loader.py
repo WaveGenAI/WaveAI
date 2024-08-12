@@ -13,7 +13,6 @@ from audiotools import AudioSignal
 from torch.utils.data import Dataset
 
 import model.text_encoder as text_encoder
-from model.audio_autoencoder import SementicCodec as audio_autoencoder
 
 
 class SynthDataset(Dataset):
@@ -23,23 +22,25 @@ class SynthDataset(Dataset):
         self,
         audio_dir: str,
         duration: int = 30,
-        mono: bool = True,
         sample_rate: int = 44100,
         max_length: int = 512,
         prompt: bool = False,
         overwrite: bool = False,
         save_dir: str = "./.data",
+        codec: str = "DAC",
+        config_codec: dict = None,
     ):
         """Initializes the dataset.
 
         Args:
             audio_dir (str): Path to the directory containing the audio files.
             duration (int, optional): duration of an audio. Defaults to 30.
-            mono (bool, optional): convert to mono. Defaults to True.
             sample_rate (int, optional): sample rate of the audio. Defaults to 44100.
             max_length (int, optional): max length of the prompt. Defaults to 512.
             prompt (bool, optional): whether to use prompt. Defaults to False.
             overwrite (bool, optional): whether to overwrite the existing data. Defaults to False.
+            codec (str, optional): the codec to use. Defaults to "DAC".
+            config_codec (dict, optional): the configuration of the codec. Defaults to None.
         """
 
         super().__init__()
@@ -48,11 +49,12 @@ class SynthDataset(Dataset):
             audio_dir,
             save_dir,
             duration,
-            mono,
             sample_rate,
             max_length,
             prompt,
             overwrite,
+            codec,
+            config_codec,
         )
 
         self.filenames = glob.glob(save_dir + "/*.pkl")
@@ -63,11 +65,12 @@ class SynthDataset(Dataset):
         audio_dir: str,
         save_dir: str,
         duration: int = 30,
-        mono: bool = True,
         sample_rate: int = 44100,
         max_length: int = 512,
         prompt: bool = False,
         overwrite: bool = False,
+        codec: str = "DAC",
+        config_codec: dict = None,
     ):
 
         if not overwrite and os.path.exists(save_dir):
@@ -104,9 +107,20 @@ class SynthDataset(Dataset):
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        audio_codec = audio_autoencoder(
-            device=device, bandwidth=3.0, sample_rate=sample_rate
-        )
+        if codec == "DAC":
+            from model.audio_autoencoder import DAC as audio_autoencoder
+        elif codec == "Encodec":
+            from model.audio_autoencoder import Encodec as audio_autoencoder
+        elif codec == "SementicCodec":
+            from model.audio_autoencoder import SementicCodec as audio_autoencoder
+        else:
+            raise ValueError("Invalid codec")
+
+        if codec in config_codec.keys():
+            audio_codec = audio_autoencoder(device=device, **config_codec[codec])
+        else:
+            audio_codec = audio_autoencoder(device=device)
+
         text_enc = (
             text_encoder.T5EncoderBaseModel(max_length=max_length).eval().to(device)
         )
@@ -126,36 +140,43 @@ class SynthDataset(Dataset):
 
             audio.resample(sample_rate)
 
-            if mono:
-                audio = audio.to_mono()
-
             if audio.shape[-1] >= (duration * sample_rate):
                 start_idx = random.randint(0, audio.shape[-1] - duration * sample_rate)
                 audio = audio[:, :, start_idx : start_idx + duration * sample_rate]
 
-            discret_audio_repr = audio_codec.encode(audio.audio_data.to(device))
-            discret_audio_repr = discret_audio_repr.transpose(0, -1).to(device)
+            codes = []
 
-            data = {"audio": discret_audio_repr.cpu()}
+            for channel in range(audio.num_channels):
+                discret_audio_repr = audio_codec.encode(
+                    audio.audio_data[:, channel, :].unsqueeze(1).to(device)
+                ).transpose(0, -1)
+                codes.append(discret_audio_repr)
 
-            if prompt:
-                with open(audio_file.replace(".mp3", ".txt"), encoding="utf-8") as f:
-                    prompt_text = f.read()
+            for idx, code in enumerate(codes):
+                discret_audio_repr = code.cpu()
+                data = {"audio": discret_audio_repr.cpu()}
 
-                # pad the text to the max length
-                prompt_text = prompt_text[:max_length].ljust(max_length, " ")
+                if prompt:
+                    with open(
+                        audio_file.replace(".mp3", ".txt"), encoding="utf-8"
+                    ) as f:
+                        prompt_text = f.read()
 
-                text_latent = text_enc([prompt_text])
-                data["text"] = text_latent.cpu()
+                    # pad the text to the max length
+                    prompt_text = prompt_text[:max_length].ljust(max_length, " ")
 
-            save_path = os.path.join(
-                save_dir, os.path.basename(audio_file).replace(".mp3", ".pkl")
-            )
-            with open(save_path, "wb") as f:
-                pickle.dump(data, f)
+                    text_latent = text_enc([prompt_text])
+                    data["text"] = text_latent.cpu()
 
-            progress += 1
-            print(f"Progress: {progress}/{len(filenames)}", end="\r")
+                save_path = os.path.join(
+                    save_dir,
+                    f"({idx})" + os.path.basename(audio_file).replace(".mp3", ".pkl"),
+                )
+                with open(save_path, "wb") as f:
+                    pickle.dump(data, f)
+
+                progress += 1
+                print(f"Progress: {progress}/{len(filenames)}", end="\r")
 
     def __len__(self) -> int:
         """Returns the number of waveforms in the dataset.

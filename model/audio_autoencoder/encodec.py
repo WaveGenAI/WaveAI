@@ -17,6 +17,7 @@ class Encodec(AutoEncoder):
         self.model.set_target_bandwidth(bandwidth)
 
         self.model.to(device)
+        self._device = device
 
     def compress(self, x):
         raise NotImplementedError
@@ -32,8 +33,9 @@ class Encodec(AutoEncoder):
         raise NotImplementedError
 
     def decode(self, z: Tensor) -> Tensor:
+        z = z.to(self._device)
         with torch.no_grad():
             return self.model.decode([[z, None]])
 
     def sample_rate(self):
-        return 24000
+        return self.model.sample_rate

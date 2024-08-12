@@ -9,22 +9,50 @@ A model that can make edit of music based on a prompt. Follow MusicGen architect
 python -m pip install -r requirements.txt
 ```
 
-# Download the dataset
+# Write a config file
 
-```py
-python data/download.py --download_dir PATH --mtg --nb_files_mgt 10
+```yaml
+model:
+  num_codebooks: 9
+  codebook_size: 1024
+  hidden_size: 1024
+  cross_att_hidden_size: 512
+  max_seq_length: 3100
+  decoder_depth: 12
+  decoder_heads: 16
+  cross_att: false
+
+  pad_token_id: 1024
+
+codec:
+  name: 'DAC'
+
+data:
+  audio_dir: '/media/works/audio/'
+  save_dir: './.data2'
+  duration: 30
+  prompt: false
+  overwrite: false
+
+train:
+  max_epochs: 10
+  accumulate_grad_batches: 50
+  gradient_clip_val: 1 
+
+inference:
+  checkpoint_path: 'WAVEAI/xw0t0lls/checkpoints/epoch=8-step=6678.ckpt'
+
+Encodec:
+  bandwidth: 3.0
+
+DAC:
+  num_quantizers: 9
 ```
 
-# Process the dataset
+# Launch the trainig
 
-To process the dataset, run:
 ```py
-python data/process.py --audio_dir PATH --output_dir PATH
-```
-
-To filter wrong description, run:
-```py
-python data/filter.py --audio_dir PATH --threshold 0.1 --delete
+python3 train.py
 ```
 
 # License

@@ -16,24 +16,27 @@ class WaveAI(nn.Module):
 
         self.embedding_layers = nn.ModuleList(
             [
-                nn.Embedding(self.config.codebook_size + 1, self.config.hidden_size)
-                for _ in range(self.config.num_codebooks)
+                nn.Embedding(
+                    self.config.model.codebook_size + 1, self.config.model.hidden_size
+                )
+                for _ in range(self.config.model.num_codebooks)
             ]
         )  # each codebook has his own embedding layer
 
         embds = {
-            k: self.config.codebook_size + 1 for k in range(self.config.num_codebooks)
+            k: self.config.model.codebook_size + 1
+            for k in range(self.config.model.num_codebooks)
         }
 
         self.decoder = MultiInputTransformerWrapper(
             num_tokens=embds,
-            max_seq_len=self.config.max_seq_length,
+            max_seq_len=self.config.model.max_seq_length,
             return_only_embed=True,
             attn_layers=Decoder(
-                dim=self.config.hidden_size,
-                depth=self.config.decoder_depth,
-                heads=self.config.decoder_heads,
-                cross_attend=self.config.cross_att,  # cross-attention state
+                dim=self.config.model.hidden_size,
+                depth=self.config.model.decoder_depth,
+                heads=self.config.model.decoder_heads,
+                cross_attend=self.config.model.cross_att,  # cross-attention state
                 attn_flash=True,
                 rotary_pos_emb=True,
                 layer_dropout=0.1,  # stochastic depth - dropout entire layer
@@ -46,8 +49,10 @@ class WaveAI(nn.Module):
         # each head predicts a codebook (not its index)
         self.lm_heads = nn.ModuleList(
             [
-                nn.Linear(self.config.hidden_size, self.config.codebook_size)
-                for _ in range(self.config.num_codebooks)
+                nn.Linear(
+                    self.config.model.hidden_size, self.config.model.codebook_size
+                )
+                for _ in range(self.config.model.num_codebooks)
             ]
         )
 
@@ -65,11 +70,11 @@ class WaveAI(nn.Module):
         """
 
         inputs_ids = inputs_ids.masked_fill(
-            inputs_ids == -100, self.config.pad_token_id
+            inputs_ids == -100, self.config.model.pad_token_id
         )
 
         x = {}
-        for k in range(self.config.num_codebooks):
+        for k in range(self.config.model.num_codebooks):
             x[k] = inputs_ids[:, k, :]
 
         # pass the embeddings through the decoder
