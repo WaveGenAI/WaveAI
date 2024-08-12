@@ -71,7 +71,9 @@ class WaveModelInference:
 
         input_ids = input_ids[:, :, : self.model.config.model.max_seq_length]
 
-        output_ids = self.generation.sampling(None, input_ids, top_k=50)
+        output_ids = self.generation.sampling(
+            None, input_ids, top_k=self.model.config.inference.top_k
+        )
         output_ids = output_ids[:, :, :]
 
         with torch.no_grad():

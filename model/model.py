@@ -14,15 +14,6 @@ class WaveAI(nn.Module):
         super().__init__()
         self.config = config
 
-        self.embedding_layers = nn.ModuleList(
-            [
-                nn.Embedding(
-                    self.config.model.codebook_size + 1, self.config.model.hidden_size
-                )
-                for _ in range(self.config.model.num_codebooks)
-            ]
-        )  # each codebook has his own embedding layer
-
         embds = {
             k: self.config.model.codebook_size + 1
             for k in range(self.config.model.num_codebooks)
@@ -38,11 +29,9 @@ class WaveAI(nn.Module):
                 heads=self.config.model.decoder_heads,
                 cross_attend=self.config.model.cross_att,  # cross-attention state
                 attn_flash=True,
-                rotary_pos_emb=True,
                 layer_dropout=0.1,  # stochastic depth - dropout entire layer
                 attn_dropout=0.1,  # dropout post-attention
                 ff_dropout=0.1,  # feedforward dropout
-                use_scalenorm=True,
             ),
         )
 
