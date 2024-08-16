@@ -21,8 +21,6 @@ class SementicCodec(AutoEncoder):
         token_rate=100,
         semantic_vocab_size=8192,
         sample_rate=44100,
-        *args,
-        **kwargs
     ):
 
         self.model = SemantiCodec(
@@ -31,11 +29,8 @@ class SementicCodec(AutoEncoder):
 
         self._sample_rate = sample_rate
 
-    def compress(self, x):
-        self.encode(x)
-
-    def encode(self, x: Tensor) -> Tensor:
-        audio = AudioSignal(x.cpu(), sample_rate=self._sample_rate)
+    def compress(self, x: Tensor, sample_rate: int) -> Tensor:
+        audio = AudioSignal(x.cpu(), sample_rate=sample_rate)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             audio_path = os.path.join(tmpdirname, "temp.wav")
@@ -45,9 +40,6 @@ class SementicCodec(AutoEncoder):
                 return self.model.encode(audio_path).transpose(1, 2)
 
     def decompress(self, z: Tensor) -> Tensor:
-        return self.decode(z)
-
-    def decode(self, z: Tensor) -> Tensor:
         z = z.transpose(1, 2)
         z = z.cpu()
 

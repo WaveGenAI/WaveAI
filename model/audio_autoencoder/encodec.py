@@ -12,17 +12,14 @@ from .autoencoder import AutoEncoder
 class Encodec(AutoEncoder):
     """Encodec model for audio compression."""
 
-    def __init__(self, device: torch.device, bandwidth: float = 6.0, *args, **kwargs):
-        self.model = EncodecModel.encodec_model_24khz()
+    def __init__(self, device: torch.device, bandwidth: float = 6.0):
+        self.model = EncodecModel.encodec_model_48khz()
         self.model.set_target_bandwidth(bandwidth)
 
         self.model.to(device)
         self._device = device
 
-    def compress(self, x):
-        raise NotImplementedError
-
-    def encode(self, x: Tensor) -> Tensor:
+    def compress(self, x: Tensor, *args, **kwargs) -> Tensor:
         with torch.no_grad():
             encoded_frames = self.model.encode(x)
 
@@ -30,9 +27,6 @@ class Encodec(AutoEncoder):
         return codes
 
     def decompress(self, z: Tensor) -> Tensor:
-        raise NotImplementedError
-
-    def decode(self, z: Tensor) -> Tensor:
         z = z.to(self._device)
         with torch.no_grad():
             return self.model.decode([[z, None]])

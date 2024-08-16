@@ -4,6 +4,7 @@ DAC model for audio compression.
 
 import dac
 import torch
+from audiotools import AudioSignal
 from torch import Tensor
 
 from .autoencoder import AutoEncoder
@@ -12,23 +13,20 @@ from .autoencoder import AutoEncoder
 class DAC(AutoEncoder):
     """DAC model for audio compression."""
 
-    def __init__(self, device: torch.device, *args, **kwargs):
-        model_path = dac.utils.download(model_type="44khz")
+    def __init__(self, device: torch.device, model_type: str):
+        model_path = dac.utils.download(model_type=model_type)
         self.model = dac.DAC.load(model_path)
         self.model.to(device)
         self.model.eval()
 
         self._device = device
 
-    def compress(self, x):
+    def compress(self, x: torch.Tensor, sample_rate: int):
+        audio = AudioSignal(x.cpu(), sample_rate=sample_rate)
         with torch.no_grad():
-            pred = self.model.compress(x)
+            pred = self.model.compress(audio)
 
         return pred.codes
-
-    def encode(self, x: Tensor) -> Tensor:
-        with torch.no_grad():
-            return self.model.encode(x)[1]
 
     def decompress(self, z: Tensor) -> Tensor:
         dac_file = dac.DACFile(
@@ -44,12 +42,6 @@ class DAC(AutoEncoder):
 
         with torch.no_grad():
             return self.model.decompress(dac_file)
-
-    def decode(self, z: Tensor) -> Tensor:
-        z = z.to(self._device)
-        with torch.no_grad():
-            z = self.model.quantizer.from_codes(z)[0]
-            return self.model.decode(z)
 
     def sample_rate(self):
         return self.model.sample_rate

@@ -27,15 +27,7 @@ except RuntimeError:
 
 model = WaveAILightning()
 
-dataset = SynthDataset(
-    audio_dir=config.data.audio_dir,
-    save_dir=config.data.save_dir,
-    duration=config.data.duration,
-    prompt=config.data.prompt,
-    overwrite=config.data.overwrite,
-    codec=config.codec.name,
-    config_codec=config.__dict__[config.codec.name].__dict__,
-)
+dataset = SynthDataset(overwrite=True)
 
 test_size = min(int(0.1 * len(dataset)), 200)
 train_size = len(dataset) - test_size
