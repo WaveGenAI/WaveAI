@@ -189,21 +189,24 @@ class SynthDataset(Dataset):
         prompt = [item["prompt"] for item in batch]
         lyrics = [item["transcript"] for item in batch]
 
-        codes = (
-            torch.nn.utils.rnn.pad_sequence(audio, batch_first=True, padding_value=-100)
-            .transpose(1, 2)
-            .squeeze(-1)
-        )
+        with torch.no_grad():
+            codes = (
+                torch.nn.utils.rnn.pad_sequence(
+                    audio, batch_first=True, padding_value=-100
+                )
+                .transpose(1, 2)
+                .squeeze(-1)
+            )
 
-        # tokenize the lyrics
-        lyrics_ids = self._tok(
-            lyrics,
-            padding=True,
-            truncation=True,
-            max_length=config.data.max_lyrics_length,
-            return_tensors="pt",
-        ).input_ids
+            # tokenize the lyrics
+            lyrics_ids = self._tok(
+                lyrics,
+                padding=True,
+                truncation=True,
+                max_length=config.data.max_lyrics_length,
+                return_tensors="pt",
+            ).input_ids
 
-        prompts_embeds = self.text_enc(prompt)
+            prompts_embeds = self.text_enc(prompt)
 
         return codes, prompts_embeds, lyrics_ids

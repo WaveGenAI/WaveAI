@@ -4,7 +4,7 @@ Encoder Model for Text Data
 
 import torch
 import torch.nn as nn
-from transformers import T5EncoderModel, AutoTokenizer
+from transformers import AutoTokenizer, T5EncoderModel
 
 
 class T5EncoderBaseModel(nn.Module):
@@ -26,6 +26,7 @@ class T5EncoderBaseModel(nn.Module):
 
         self._max_length = max_length
 
+    @torch.no_grad()
     def forward(self, inputs: list) -> torch.Tensor:
         """Forward pass of the model
 
