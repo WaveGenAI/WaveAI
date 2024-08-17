@@ -27,7 +27,7 @@ except RuntimeError:
 
 model = WaveAILightning()
 
-dataset = SynthDataset(overwrite=True)
+dataset = SynthDataset(overwrite=False)
 
 test_size = min(int(0.1 * len(dataset)), 200)
 train_size = len(dataset) - test_size

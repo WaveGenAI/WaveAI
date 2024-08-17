@@ -209,6 +209,6 @@ class SynthDataset(Dataset):
             return_tensors="pt",
         ).input_ids
 
-        prompts_embd = self.text_enc(prompt)
+        prompts_embeds = self.text_enc(prompt)
 
-        return codes, prompts_embd, lyrics_ids
+        return codes, prompts_embeds, lyrics_ids

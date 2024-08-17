@@ -47,31 +47,38 @@ class WaveAILightning(L.LightningModule):
 
     def step(self, batch, batch_idx) -> torch.Tensor:
         tgt_audio = batch[0]
-        src_text = batch[1]
-
-        if self.config.model.cross_att:
-            src_text = src_text.to(self.device)
+        prompts = batch[1]
+        lyrics = batch[2]
 
         tgt_audio = tgt_audio.to(self.device)
+        prompts = prompts.to(self.device)
+        lyrics = lyrics.to(self.device)
 
         # cut the audio to the max length
         tgt_audio = tgt_audio[:, :, : self.config.model.max_seq_length]
 
+        # get the delay pattern, in this way each token is delayed by the same amount of time
         inputs, _ = self.delay_pattern.build_delay_pattern_mask(
             tgt_audio, self.config.model.pad_token_id, self.config.model.max_seq_length
         )
 
+        # just for logging
         nbm_val = inputs.numel()
         self.log("nbm_token", nbm_val)
 
+        # shift the tokens to the right (like that the model will predict the next token and will not see the future)
         inputs = self.delay_pattern.shift_tokens_right(
             inputs, self.config.model.pad_token_id, self.config.model.pad_token_id
         ).to(self.device)
 
+        # create the inputs and labels tensors
         inputs_ids = inputs[..., :-1]
         labels = inputs[..., 1:]
 
-        logits = self.model(inputs_ids, src_text)
+        logits = self.model(inputs_ids, prompts, lyrics)
+
+        # get logits values without prepends embedding
+        logits = logits[..., -labels.size(-1) :, :]
 
         # ignore the pad token (when pytorch see -100 in the labels it will ignore it)
         labels = labels.masked_fill(labels == self.config.model.pad_token_id, -100)
