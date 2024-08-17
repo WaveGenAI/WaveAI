@@ -116,12 +116,7 @@ class SynthDataset(Dataset):
             audio.resample(self._sample_rate)
 
             if audio.shape[-1] >= (self._duration * self._sample_rate):
-                start_idx = random.randint(
-                    0, audio.shape[-1] - self._duration * self._sample_rate
-                )
-                audio = audio[
-                    :, :, start_idx : start_idx + self._duration * self._sample_rate
-                ]
+                audio = audio[:, :, : self._duration * self._sample_rate]
 
             codes = []
 
