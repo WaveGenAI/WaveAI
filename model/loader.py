@@ -139,30 +139,18 @@ class SynthDataset(Dataset):
                 with open(
                     audio_file.replace(".mp3", "_descr.txt"), encoding="utf-8"
                 ) as f:
-                    prompt_text = f.read()
-
-                text_latent = self.text_enc([prompt_text])
-                data["prompt"] = text_latent.cpu()
+                    data["prompt"] = f.read().strip()
 
                 with open(
                     audio_file.replace(".mp3", "_transcript.txt"), encoding="utf-8"
                 ) as f:
-                    transcript_tok = self._tok(
-                        f.read(),
-                        return_tensors="pt",
-                        padding="max_length",
-                        truncation=True,
-                        max_length=config.data.max_lyrics_length,
-                    )
-
-                data["transcript"] = transcript_tok.input_ids
+                    data["transcript"] = f.read().strip()
 
                 save_path = os.path.join(
                     self._save_dir,
                     f"({idx})" + os.path.basename(audio_file).replace(".mp3", ".pkl"),
                 )
 
-                print(data)
                 with open(save_path, "wb") as f:
                     pickle.dump(data, f)
 
@@ -200,20 +188,27 @@ class SynthDataset(Dataset):
             batch (list): List of tuples containing the audio and text representations.
 
         Returns:
-            tuple: A tuple containing the audio and text latent representations.
+            tuple: A tuple containing the audio and text latent representations of prompt and lyrics.
         """
+        audio = [torch.tensor(item["audio"]) for item in batch]
+        prompt = [item["prompt"] for item in batch]
+        lyrics = [item["transcript"] for item in batch]
 
-        audio_reprs, text_reprs = zip(*batch)
-
-        audio_reprs = (
-            torch.nn.utils.rnn.pad_sequence(
-                audio_reprs, batch_first=True, padding_value=-100
-            )
+        codes = (
+            torch.nn.utils.rnn.pad_sequence(audio, batch_first=True, padding_value=-100)
             .transpose(1, 2)
             .squeeze(-1)
         )
 
-        prompt_reprs = torch.stack(text_reprs, dim=0).squeeze(1)
-        lyrics_reprs = torch.stack([item["transcript"] for item in text_reprs], dim=0)
+        # tokenize the lyrics
+        lyrics_ids = self._tok(
+            lyrics,
+            padding=True,
+            truncation=True,
+            max_length=config.data.max_lyrics_length,
+            return_tensors="pt",
+        ).input_ids
 
-        return audio_reprs, text_reprs
+        prompts_embd = self.text_enc(prompt)
+
+        return codes, prompts_embd, lyrics_ids

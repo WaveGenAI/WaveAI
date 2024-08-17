@@ -39,7 +39,7 @@ class T5EncoderBaseModel(nn.Module):
         input_ids = self.tokenizer(
             inputs,
             return_tensors="pt",
-            padding="max_length",
+            padding=True,
             truncation=True,
             max_length=self._max_length,
         ).input_ids
