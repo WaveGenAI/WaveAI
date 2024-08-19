@@ -57,7 +57,10 @@ class WaveAILightning(L.LightningModule):
         self.model = WaveAI(self.config)
         self.save_hyperparameters()
 
-        self.loss_metric = LossTensor()
+        # put in list to avoid training in the pytorch-lightning (a bit hacky)
+        self.loss_metric = [LossTensor()]
+        self.loss_fn = [CrossEntropyLoss()]
+
         self.generator = Generation(self.model)
 
         # load codec with cpu to save vram
@@ -111,7 +114,6 @@ class WaveAILightning(L.LightningModule):
         labels = labels.masked_fill(labels == self.config.model.pad_token_id, -100)
 
         loss = torch.zeros([], device=self.device)
-        loss_fn = CrossEntropyLoss()
 
         for codebook in range(self.config.model.num_codebooks):
             logits_k = (
@@ -123,7 +125,7 @@ class WaveAILightning(L.LightningModule):
             # max_prob_idx = logits_k.argmax(dim=-1)
             # print(targets_k[..., 10:20], max_prob_idx[..., 10:20])
 
-            loss += loss_fn(logits_k, targets_k)
+            loss += self.loss_fn[0](logits_k, targets_k)
 
         loss = loss / self.config.model.num_codebooks
 
@@ -140,11 +142,11 @@ class WaveAILightning(L.LightningModule):
         loss = self.step(batch, batch_idx)
 
         self.log("train_loss", loss, on_step=True)
-        self.loss_metric(loss)
+        self.loss_metric[0](loss)
 
         if not self.trainer.fit_loop._should_accumulate():
-            self.log("Accumulate loss", self.loss_metric.compute())
-            self.loss_metric.reset()
+            self.log("Accumulate loss", self.loss_metric[0].compute())
+            self.loss_metric[0].reset()
 
         return loss
 

@@ -2,6 +2,8 @@
 Train script for WaveAI
 """
 
+import os
+
 import lightning as L
 import torch
 import torch.multiprocessing as mp
@@ -32,21 +34,23 @@ dataset = SynthDataset(overwrite=False)
 test_size = min(int(0.1 * len(dataset)), 200)
 train_size = len(dataset) - test_size
 
+num_workers = os.cpu_count() // 3
+
 train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
 train_loader = DataLoader(
     train_dataset,
-    batch_size=1,
+    batch_size=config.train.batch_size,
     shuffle=True,
     collate_fn=dataset.collate_fn,
-    num_workers=0,
+    num_workers=num_workers // 2,
 )
 valid_loader = DataLoader(
     test_dataset,
-    batch_size=1,
+    batch_size=config.train.batch_size,
     shuffle=False,
     collate_fn=dataset.collate_fn,
-    num_workers=0,
+    num_workers=num_workers // 2,
 )
 
 wandb_logger = WandbLogger(project="WAVEAI")
@@ -60,6 +64,9 @@ trainer = L.Trainer(
     log_every_n_steps=1,
     default_root_dir="checkpoints",
     precision="16-mixed",
+    devices="auto",
+    strategy="auto",
+    profiler="simple",
 )
 
 

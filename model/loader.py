@@ -63,20 +63,16 @@ class SynthDataset(Dataset):
         self._sample_rate = config.codec.sample_rate
         self._overwrite = overwrite
 
-        self.audio_codec = audio_autoencoder(
-            device=self._device, **config.__dict__[config.codec.name].__dict__
-        )
-
-        self.preprocess_and_save()
+        if self._overwrite or not os.path.exists(self._save_dir):
+            self.audio_codec = audio_autoencoder(
+                device=self._device, **config.__dict__[config.codec.name].__dict__
+            )
+            self.preprocess_and_save()
 
         self._filenames = glob.glob(self._save_dir + "/*.pkl")
 
     def preprocess_and_save(self):
         """Preprocesses the audio files and saves them to the disk."""
-
-        if not self._overwrite and os.path.exists(self._save_dir):
-            return
-
         if os.path.exists(self._save_dir):
             # ask the user if they want to overwrite the existing data
             success = False
@@ -185,7 +181,7 @@ class SynthDataset(Dataset):
         Returns:
             tuple: A tuple containing the audio and text latent representations of prompt and lyrics.
         """
-        audio = [torch.tensor(item["audio"]) for item in batch]
+        audio = [item["audio"] for item in batch]
         prompt = [item["prompt"] for item in batch]
         lyrics = [item["transcript"] for item in batch]
 
