@@ -5,10 +5,8 @@ from model.pattern import DelayPattern
 
 
 class Generation:
-    def __init__(self, model: torch.nn.Module, device: torch.device):
+    def __init__(self, model: torch.nn.Module):
         self.model = model
-        self.device = device
-
         self.pattern = DelayPattern()
 
     def beam_search(self, *args, **kwargs):
@@ -17,10 +15,13 @@ class Generation:
     def sampling(
         self,
         cross_att_emb: torch.Tensor,
-        input_ids: torch.Tensor,
+        prepends_ids: torch.Tensor,
         temperature: float = 1,
         top_k: int = 250,
     ) -> torch.Tensor:
+
+        input_ids = torch.ones((1, self.model.config.model.num_codebooks, 1))
+        input_ids += self.model.config.model.pad_token_id - 1
 
         output_ids, mask = self.pattern.build_delay_pattern_mask(
             input_ids,
@@ -28,12 +29,19 @@ class Generation:
             max_seq_length=self.model.config.model.max_seq_length,
         )
 
-        steps = min(1000, self.model.config.model.max_seq_length - output_ids.size(-1))
+        steps = min(
+            1000,
+            self.model.config.model.max_seq_length
+            - output_ids.size(-1)
+            - prepends_ids.size(-1),
+        )
 
         for i in range(steps):
             inputs_ids_pred = self.pattern.apply_delay_pattern_mask(output_ids, mask)
+            inputs_ids_pred = inputs_ids_pred.to(prepends_ids.device)
 
-            logits = self.model(inputs_ids_pred.to(self.device))
+            logits = self.model(inputs_ids_pred, cross_att_emb, prepends_ids)
+
             last_toks_logits = logits[
                 :, :, -1, :
             ]  # shape: [batch_size, num_heads, vocab_size]
@@ -53,6 +61,6 @@ class Generation:
             print(f"Step {i + 1} / {steps}", end="\r")
 
         output_ids = self.pattern.apply_delay_pattern_mask(output_ids, mask)
-        output_ids = self.pattern.reverse_delay_pattern_mask(output_ids)
+        output_ids = self.pattern.reverse_delay_pattern_mask(output_ids)[..., 1:]
 
         return output_ids

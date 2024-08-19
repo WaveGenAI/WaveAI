@@ -1,13 +1,27 @@
 import lightning as L
 import torch
+from audiotools import AudioSignal
 from torch import optim
 from torch.nn import CrossEntropyLoss
 from torch.optim import lr_scheduler
 from torchmetrics import Metric
 
+import wandb
+
 from .config import Config
+from .generation import Generation
 from .model import WaveAI
 from .pattern import DelayPattern
+
+config = Config()
+if config.codec.name == "DAC":
+    from model.audio_autoencoder import DAC as audio_autoencoder
+elif config.codec.name == "Encodec":
+    from model.audio_autoencoder import Encodec as audio_autoencoder
+elif config.codec.name == "SementicCodec":
+    from model.audio_autoencoder import SementicCodec as audio_autoencoder
+else:
+    raise ValueError("Invalid codec")
 
 
 class LossTensor(Metric):
@@ -38,12 +52,23 @@ class WaveAILightning(L.LightningModule):
 
         super().__init__()
 
-        self.config = Config()
+        self.config = config
         self.delay_pattern = DelayPattern()
         self.model = WaveAI(self.config)
         self.save_hyperparameters()
 
         self.loss_metric = LossTensor()
+        self.generator = Generation(self.model)
+
+        # load codec with cpu to save vram
+        if config.codec.name in config.__dict__.keys():
+            self.audio_codec = audio_autoencoder(
+                device="cpu", **config.__dict__[config.codec.name].__dict__
+            )
+        else:
+            self.audio_codec = audio_autoencoder(device="cpu")
+
+        self.nbm_sample_gen = 0
 
     def step(self, batch, batch_idx) -> torch.Tensor:
         tgt_audio = batch[0]
@@ -105,6 +130,10 @@ class WaveAILightning(L.LightningModule):
         return loss
 
     def training_step(self, batch, batch_idx):
+        # reset the counter for the eval step experiment
+        self.nbm_sample_gen = 0
+
+        # if the batch is too small, skip it (I should do that in the pipeline)
         if batch[0].shape[-1] < (self.config.model.num_codebooks + 1):
             return
 
@@ -120,6 +149,31 @@ class WaveAILightning(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
+        if self.nbm_sample_gen < 3:
+            # run experiment on a single batch
+            prompts = batch[1][0].unsqueeze(0)
+            lyrics = batch[2][0].unsqueeze(0)
+
+            prompts = prompts.to(self.device)
+            lyrics = lyrics.to(self.device)
+
+            output_ids = self.generator.sampling(prompts, lyrics)
+            with torch.no_grad():
+                y = self.audio_codec.decompress(output_ids)
+
+            y = AudioSignal(y.cpu().numpy(), sample_rate=self.audio_codec.sample_rate())
+
+            # log to wandb the audio
+            self.logger.experiment.log(
+                {
+                    "audio": wandb.Audio(
+                        y.numpy()[0, 0], sample_rate=y.sample_rate, caption="audio"
+                    ),
+                }
+            )
+
+            self.nbm_sample_gen += 1
+
         loss = self.step(batch, batch_idx)
 
         self.log("val_loss", loss)

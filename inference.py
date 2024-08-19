@@ -4,13 +4,12 @@ Code for inference with the model.
 
 import torch
 from audiotools import AudioSignal
-from torch.utils.data import DataLoader
+from transformers import AutoTokenizer
 
 import model.text_encoder as text_encoder
 from model.config import Config
 from model.generation import Generation
 from model.lightning_model import WaveAILightning
-from model.loader import SynthDataset
 
 config = Config()
 
@@ -29,17 +28,23 @@ class WaveModelInference:
     Class to perform inference with the model.
     """
 
-    def __init__(self, path: str = None):
+    def __init__(self):
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         print(f"Using device: {self.device}")
+
         self.model = WaveAILightning()
+
+        path = config.inference.checkpoint_path
         if path is not None:
             self.model = WaveAILightning.load_from_checkpoint(path)
+            print(f"Loaded model from {path}")
 
         self.model = self.model.model.to(self.device)
         self.model.eval()
 
-        self.text_encoder = text_encoder.T5EncoderBaseModel(max_length=512)
+        self.text_encoder = text_encoder.T5EncoderBaseModel(
+            max_length=config.data.max_prompt_length
+        )
 
         if config.codec.name in config.__dict__.keys():
             self.audio_codec = audio_autoencoder(
@@ -48,12 +53,14 @@ class WaveModelInference:
         else:
             self.audio_codec = audio_autoencoder(device=self.device)
 
+        self._tok = AutoTokenizer.from_pretrained(config.model.tokenizer)
+
         self.generation = Generation(self.model, device=self.device)
 
     def sampling(
         self,
-        src_text: str | torch.Tensor,
-        input_ids: torch.Tensor | None = None,
+        src_text: str,
+        lyrics: str,
     ):
         """Sampling with the model.
 
@@ -62,17 +69,14 @@ class WaveModelInference:
             input_ids (torch.Tensor, optional): the input ids to start the generation from. Defaults to None.
         """
 
-        if isinstance(src_text, str):
-            encoded_text = self.text_encoder([src_text])
-        else:
-            encoded_text = src_text
+        prompt_embd = self.text_encoder([src_text])
+        lyric_ids = self._tok(lyrics, return_tensors="pt").input_ids
 
-        encoded_text = encoded_text.to(self.device)
-
-        input_ids = input_ids[:, :, : self.model.config.model.max_seq_length]
+        prompt_embd = prompt_embd.to(self.device)
+        lyric_ids = lyric_ids.to(self.device)
 
         output_ids = self.generation.sampling(
-            None, input_ids, top_k=self.model.config.inference.top_k
+            prompt_embd, lyric_ids, top_k=self.model.config.inference.top_k
         )
         output_ids = output_ids[:, :, :]
 
@@ -83,29 +87,14 @@ class WaveModelInference:
         y.write("output.wav")
 
 
-model = WaveModelInference(config.inference.checkpoint_path)
+model = WaveModelInference()
 
-text = """ 
-bass guitar with drums and piano 
+prompt = """ 
+subject: baltimore club,bass music,electronic,experimental,jersey club,juke,jungle,vaporwave,future funk,screwgaze,television,vaporwave,vhs,philadelphia, title: Touch The Ground, album: Culture Vulture, genre:
 """.strip()
 
-codec_args = None
-if config.codec.name in config.__dict__.keys():
-    codec_args = config.__dict__[config.codec.name]
+lyric = """
+I'm a little teapot
+""".strip()
 
-dataset = SynthDataset(
-    audio_dir=config.data.audio_dir,
-    save_dir=config.data.save_dir,
-    duration=config.data.duration,
-    prompt=config.data.prompt,
-    overwrite=False,
-    codec=config.codec.name,
-    config_codec=codec_args,
-)
-train_loader = DataLoader(
-    dataset, batch_size=1, shuffle=True, collate_fn=dataset.collate_fn
-)
-
-first_batch = next(iter(train_loader))
-
-model.sampling(text, first_batch[0][..., :300])
+model.sampling(prompt, lyric)
