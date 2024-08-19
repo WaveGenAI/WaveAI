@@ -55,7 +55,9 @@ class WaveAILightning(L.LightningModule):
         lyrics = lyrics.to(self.device)
 
         # cut the audio to the max length
-        tgt_audio = tgt_audio[:, :, : self.config.model.max_seq_length]
+        tgt_audio = tgt_audio[
+            :, :, : self.config.model.max_seq_length - lyrics.size(-1)
+        ]
 
         # get the delay pattern, in this way each token is delayed by the same amount of time
         inputs, _ = self.delay_pattern.build_delay_pattern_mask(
@@ -103,6 +105,9 @@ class WaveAILightning(L.LightningModule):
         return loss
 
     def training_step(self, batch, batch_idx):
+        if batch[0].shape[-1] < (self.config.model.num_codebooks + 1):
+            return
+
         loss = self.step(batch, batch_idx)
 
         self.log("train_loss", loss, on_step=True)
@@ -121,13 +126,31 @@ class WaveAILightning(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
+        # Warmup Scheduler
+        warmup_steps = self.config.train.warmup_steps
+        lr_max = self.config.train.lr_max
+        lr_min = self.config.train.lr_min
+
         optimizer = optim.AdamW(
-            self.parameters(), lr=1e-4, betas=(0.9, 0.95), weight_decay=0.1
-        )
-        scheduler = lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=self.trainer.estimated_stepping_batches, eta_min=1e-6
+            self.parameters(), lr=lr_max, betas=(0.9, 0.95), weight_decay=0.1
         )
 
-        return [optimizer], [
-            {"scheduler": scheduler, "interval": "step", "monitor": "val_loss"}
-        ]
+        def lr_lambda_warmup(current_step):
+            return min(1.0, float(current_step) / float(warmup_steps))
+
+        warmup_scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda_warmup)
+
+        # CosineAnnealingLR Scheduler
+        total_steps = self.trainer.estimated_stepping_batches
+        cosine_scheduler = lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=(total_steps - warmup_steps), eta_min=lr_min
+        )
+
+        # Combine schedulers with SequentialLR
+        scheduler = lr_scheduler.SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[warmup_steps],
+        )
+
+        return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
