@@ -13,12 +13,15 @@ from lightning.pytorch.loggers import WandbLogger
 from torch.utils.data import DataLoader, random_split
 
 from model.config import Config
+from model.data import AudioPreprocessor
 from model.lightning_model import WaveAILightning
-from model.loader import SynthDataset
 
 lr_monitor = LearningRateMonitor(logging_interval="step")
 config = Config()
+data = AudioPreprocessor(config)
 
+dataset = data.get_dataset()
+print(dataset)
 torch.set_float32_matmul_precision("medium")
 # torch.set_printoptions(threshold=10000)
 

@@ -63,13 +63,35 @@ class SynthDataset(Dataset):
         self._sample_rate = config.codec.sample_rate
         self._overwrite = overwrite
 
-        if self._overwrite or not os.path.exists(self._save_dir):
+        with torch.no_grad():
             self.audio_codec = audio_autoencoder(
                 device=self._device, **config.__dict__[config.codec.name].__dict__
             )
+
+        if self._overwrite or not os.path.exists(self._save_dir):
             self.preprocess_and_save()
 
-        self._filenames = glob.glob(self._save_dir + "/*.pkl")
+        filenames = glob.glob(self._audio_dir + "/*.mp3")
+        self._filenames = []
+
+        # delete the files that do not have the corresponding description and transcript files
+        for audio_file in filenames:
+            if not os.path.exists(audio_file.replace(".mp3", "_descr.txt")):
+                continue
+
+            if not os.path.exists(audio_file.replace(".mp3", "_transcript.txt")):
+                continue
+
+            self._filenames.append(os.path.join(self._audio_dir, audio_file))
+
+    def __len__(self) -> int:
+        """Returns the number of waveforms in the dataset.
+
+        Returns:
+            int: Number of waveforms in the dataset.
+        """
+
+        return len(self._filenames)
 
     def preprocess_and_save(self):
         """Preprocesses the audio files and saves them to the disk."""
@@ -91,16 +113,8 @@ class SynthDataset(Dataset):
 
         os.makedirs(self._save_dir)
 
-        filenames = glob.glob(self._audio_dir + "/*.mp3")
-
         progress = 0
-        for audio_file in filenames:
-            if not os.path.exists(audio_file.replace(".mp3", "_descr.txt")):
-                continue
-
-            if not os.path.exists(audio_file.replace(".mp3", "_transcript.txt")):
-                continue
-
+        for audio_file in self._filenames:
             try:
                 audio = AudioSignal(
                     audio_file, duration=self._duration if self._duration > 0 else None
@@ -109,53 +123,38 @@ class SynthDataset(Dataset):
                 print(f"Error processing {audio_file}")
                 continue
 
+            # convert to mono and resample
+            audio = audio.to_mono()
             audio.resample(self._sample_rate)
 
             if audio.shape[-1] >= (self._duration * self._sample_rate):
                 audio = audio[:, :, : self._duration * self._sample_rate]
 
-            codes = []
+            discret_audio_repr = self.audio_codec.compress(
+                audio.audio_data[:, 0, :].unsqueeze(1).to(self._device),
+                self._sample_rate,
+            ).transpose(0, -1)
 
-            for channel in range(audio.num_channels):
-                discret_audio_repr = self.audio_codec.compress(
-                    audio.audio_data[:, channel, :].unsqueeze(1).to(self._device),
-                    self._sample_rate,
-                ).transpose(0, -1)
-                codes.append(discret_audio_repr)
+            data = {"audio": discret_audio_repr.cpu()}
 
-            for idx, code in enumerate(codes):
-                discret_audio_repr = code.cpu()
-                data = {"audio": discret_audio_repr.cpu()}
+            with open(audio_file.replace(".mp3", "_descr.txt"), encoding="utf-8") as f:
+                data["prompt"] = f.read().strip()
 
-                with open(
-                    audio_file.replace(".mp3", "_descr.txt"), encoding="utf-8"
-                ) as f:
-                    data["prompt"] = f.read().strip()
+            with open(
+                audio_file.replace(".mp3", "_transcript.txt"), encoding="utf-8"
+            ) as f:
+                data["transcript"] = f.read().strip()
 
-                with open(
-                    audio_file.replace(".mp3", "_transcript.txt"), encoding="utf-8"
-                ) as f:
-                    data["transcript"] = f.read().strip()
+            save_path = os.path.join(
+                self._save_dir,
+                os.path.basename(audio_file).replace(".mp3", ".pkl"),
+            )
 
-                save_path = os.path.join(
-                    self._save_dir,
-                    f"({idx})" + os.path.basename(audio_file).replace(".mp3", ".pkl"),
-                )
-
-                with open(save_path, "wb") as f:
-                    pickle.dump(data, f)
+            with open(save_path, "wb") as f:
+                pickle.dump(data, f)
 
             progress += 1
-            print(f"Progress: {progress}/{len(filenames)}", end="\r")
-
-    def __len__(self) -> int:
-        """Returns the number of waveforms in the dataset.
-
-        Returns:
-            int: Number of waveforms in the dataset.
-        """
-
-        return len(self._filenames)
+            print(f"Progress: {progress}/{len(self._filenames)}", end="\r")
 
     def __getitem__(self, index: int) -> tuple:
         """Fetches the waveform for the given index.
@@ -167,8 +166,30 @@ class SynthDataset(Dataset):
             tuple: A tuple containing the discret representation of the audio, the padding mask and the latent representation of the text.
         """
 
-        with open(self._filenames[index], "rb") as f:
-            data = pickle.load(f)
+        audio_file = self._filenames[index]
+        audio = AudioSignal(
+            audio_file, duration=self._duration if self._duration > 0 else None
+        )
+
+        # convert to mono and resample
+        audio = audio.to_mono()
+        audio.resample(self._sample_rate)
+
+        if audio.shape[-1] >= (self._duration * self._sample_rate):
+            audio = audio[:, :, : self._duration * self._sample_rate]
+
+        discret_audio_repr = self.audio_codec.compress(
+            audio.audio_data[:, 0, :].unsqueeze(1).to(self._device),
+            self._sample_rate,
+        ).transpose(0, -1)
+
+        data = {"audio": discret_audio_repr.cpu()}
+
+        with open(audio_file.replace(".mp3", "_descr.txt"), encoding="utf-8") as f:
+            data["prompt"] = f.read().strip()
+
+        with open(audio_file.replace(".mp3", "_transcript.txt"), encoding="utf-8") as f:
+            data["transcript"] = f.read().strip()
 
         return data
 

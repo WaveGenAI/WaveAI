@@ -35,7 +35,7 @@ class LossTensor(Metric):
         self.add_state("counter", torch.tensor(0, dtype=torch.float))
 
     def update(self, loss):
-        self.loss += loss
+        self.loss += loss.clone().detach().cpu()
         self.counter += 1
 
     def compute(self):
@@ -83,9 +83,7 @@ class WaveAILightning(L.LightningModule):
         lyrics = lyrics.to(self.device)
 
         # cut the audio to the max length
-        tgt_audio = tgt_audio[
-            :, :, : self.config.model.max_seq_length - lyrics.size(-1)
-        ]
+        tgt_audio = tgt_audio[:, :, : self.config.model.max_seq_length]
 
         # get the delay pattern, in this way each token is delayed by the same amount of time
         inputs, _ = self.delay_pattern.build_delay_pattern_mask(
