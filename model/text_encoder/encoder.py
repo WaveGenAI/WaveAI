@@ -4,7 +4,7 @@ Encoder Model for Text Data
 
 import torch
 import torch.nn as nn
-from transformers import AutoTokenizer, T5EncoderModel
+from transformers import AutoModelForTextEncoding, AutoTokenizer
 
 
 class T5EncoderBaseModel(nn.Module):
@@ -21,7 +21,7 @@ class T5EncoderBaseModel(nn.Module):
         """
         super().__init__()
 
-        self.encoder = T5EncoderModel.from_pretrained(name)
+        self.encoder = AutoModelForTextEncoding.from_pretrained(name)
         self.tokenizer = AutoTokenizer.from_pretrained(name)
 
         self._max_length = max_length
@@ -46,6 +46,6 @@ class T5EncoderBaseModel(nn.Module):
         ).input_ids
         input_ids = input_ids.to(self.encoder.device)
 
-        latent_space = self.encoder(input_ids).last_hidden_state
+        encoder_hidden_states = self.encoder(input_ids)[0]
 
-        return latent_space
+        return encoder_hidden_states

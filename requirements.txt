@@ -8,7 +8,7 @@ flash-attn
 laion_clap
 x-transformers
 wandb
-
+datasets
 argbind>=0.3.7
 descript-audiotools>=0.7.2
 einops
@@ -19,7 +19,7 @@ tensorboard
 numba>=0.5.7
 jupyterlab
 lightning
-
+bitsandbytes
 encodec
 torchmetrics
 git+https://github.com/WaveGenAI/SemantiCodec-inference.git

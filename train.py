@@ -25,16 +25,42 @@ text_enc = (
 )
 model = WaveAILightning()
 
+for p in model.parameters():
+    if p.dim() > 1:
+        torch.nn.init.normal_(p, 0, 0.02)
+
+
+def stereo_convert(codec: torch.Tensor) -> torch.Tensor:
+    """Convert the codec tensor to stereo if needed
+
+    Args:
+        codec (torch.Tensor): the codec tensor
+
+    Returns:
+        torch.Tensor: the stereo codec tensor if needed
+    """
+
+    # if the shape is 2D, add a channel dimension
+    if len(codec.shape) == 2:
+        codec = codec.unsqueeze(-1)
+
+    # if the codec is mono and the model is stereo, duplicate the channel
+    if codec.shape[-1] == 1 and config.model.stereo:
+        codec = torch.cat([codec, codec], dim=-1)
+
+    return codec
+
 
 # Define the collate function for processing batches
 @torch.no_grad()
 def collate_fn(rows):
-    codec = [torch.permute(row["codec"], (2, 1, 0)) for row in rows]
+    codec = [stereo_convert(torch.permute(row["codec"], (2, 1, 0))) for row in rows]
     prompt = [row["prompt"] for row in rows]
     lyrics = [row["lyrics"] for row in rows]
 
     # Pad the codec tensors and stack them
     codes = torch.nn.utils.rnn.pad_sequence(codec, batch_first=True, padding_value=-100)
+
     codes = codes.permute(0, 3, 2, 1).contiguous()
 
     # convert from batch x channel x num_codebooks x seq_length to batch x (num_codebooks x channels) x seq_length
@@ -64,6 +90,9 @@ if __name__ == "__main__":
     # Load the dataset
     dataset = load_dataset(config.data.dataset_id)
     dataset = dataset.with_format("torch")
+
+    # shuffle the dataset
+    dataset = dataset.shuffle(seed=42)
 
     train_dataloader = DataLoader(
         dataset["train"],

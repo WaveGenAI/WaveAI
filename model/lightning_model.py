@@ -1,5 +1,6 @@
 import tempfile
 
+import bitsandbytes as bnb
 import lightning as L
 import torch
 from audiotools import AudioSignal
@@ -60,7 +61,9 @@ class WaveAILightning(L.LightningModule):
         self.audio_codec = audio_autoencoder()
         self.audio_codec.model.to("cpu")
 
-        self.nbm_sample_gen = -1  # skip first run when lightning module is initialized
+        self.num_codebooks = self.config.model.num_codebooks
+        if self.config.model.stereo:
+            self.num_codebooks = self.num_codebooks * 2
 
     def step(self, batch, batch_idx) -> torch.Tensor:
         tgt_audio, prompts, lyrics = batch
@@ -115,12 +118,37 @@ class WaveAILightning(L.LightningModule):
 
         return loss
 
+    def test_model(self, batch):
+        if not self.config.train.test_model:
+            return
+
+        # run experiment on a single sample from batch
+        prompts = batch[1][0].unsqueeze(0)
+        lyrics = batch[2][0].unsqueeze(0)
+
+        prompts = prompts.to(self.device)
+        lyrics = lyrics.to(self.device)
+
+        output_ids = self.generator.sampling(prompts, lyrics)
+        with torch.no_grad():
+            y = self.audio_codec.decode(output_ids)
+
+        y = AudioSignal(y.cpu().numpy(), sample_rate=self.audio_codec.model.sample_rate)
+
+        with tempfile.NamedTemporaryFile(suffix=".wav") as f:
+            y.write(f.name)
+            self.logger.experiment.log(
+                {
+                    "audio": wandb.Audio(f.name, caption="audio"),
+                }
+            )
+
     def training_step(self, batch, batch_idx):
-        # reset the counter for the eval step experiment
-        self.nbm_sample_gen = 0
+        if batch_idx % 10_000 == 0:
+            self.test_model(batch)
 
         # if the batch is too small, skip it (I should do that in the pipeline)
-        if batch[0].shape[-1] < (self.config.model.num_codebooks + 1):
+        if batch[0].shape[-1] < (self.num_codebooks + 1):
             return
 
         loss = self.step(batch, batch_idx)
@@ -135,31 +163,8 @@ class WaveAILightning(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        if self.nbm_sample_gen < 4 and self.nbm_sample_gen != -1:
-            # run experiment on a single sample from batch
-            prompts = batch[1][0].unsqueeze(0)
-            lyrics = batch[2][0].unsqueeze(0)
-
-            prompts = prompts.to(self.device)
-            lyrics = lyrics.to(self.device)
-
-            output_ids = self.generator.sampling(prompts, lyrics)
-            with torch.no_grad():
-                y = self.audio_codec.decode(output_ids)
-
-            y = AudioSignal(
-                y.cpu().numpy(), sample_rate=self.audio_codec.model.sample_rate
-            )
-
-            with tempfile.NamedTemporaryFile(suffix=".wav") as f:
-                y.write(f.name)
-                self.logger.experiment.log(
-                    {
-                        "audio": wandb.Audio(f.name, caption="audio"),
-                    }
-                )
-
-            self.nbm_sample_gen += 1
+        if batch_idx < 3:
+            self.test_model(batch)
 
         loss = self.step(batch, batch_idx)
 
@@ -172,7 +177,8 @@ class WaveAILightning(L.LightningModule):
         lr_max = self.config.train.lr_max
         lr_min = self.config.train.lr_min
 
-        optimizer = optim.AdamW(
+        # bnb.optim.AdamW8bit optimizer
+        optimizer = bnb.optim.AdamW8bit(
             self.parameters(), lr=lr_max, betas=(0.9, 0.95), weight_decay=0.1
         )
 
