@@ -1,3 +1,5 @@
+import argparse
+
 import lightning as L
 import torch
 import torch.multiprocessing as mp
@@ -11,6 +13,10 @@ from transformers import AutoTokenizer
 from model import text_encoder
 from model.config import Config
 from model.lightning_model import WaveAILightning
+
+args = argparse.ArgumentParser()
+args.add_argument("--save_path", type=str, default="checkpoints", required=True)
+args = args.parse_args()
 
 torch.set_float32_matmul_precision("medium")
 config = Config()
@@ -117,7 +123,7 @@ if __name__ == "__main__":
         gradient_clip_val=config.train.gradient_clip_val,
         logger=wandb_logger,
         log_every_n_steps=1,
-        default_root_dir="checkpoints",
+        default_root_dir=args.save_path,
         precision="16-mixed",
         devices="auto",
         strategy="auto",
