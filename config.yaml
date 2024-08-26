@@ -1,0 +1,34 @@
+model:
+  num_codebooks: 9
+  codebook_size: 1024
+  hidden_size: 1024
+  cross_att_hidden_size: 512
+  max_seq_length: 6000
+  decoder_depth: 12
+  decoder_heads: 16
+  vocab_size: 32128
+  pad_token_id: 1024
+  stereo: true
+  tokenizer: 'google/flan-t5-base'
+
+data:
+  dataset_id: 'WaveGenAI/audio'
+  duration: 30
+  max_prompt_length: 512
+  max_lyrics_length: 512
+
+train:
+  max_epochs: 10
+  accumulate_grad_batches: 50
+  batch_size: 1
+  gradient_clip_val: 1 
+  warmup_steps: 200
+  lr_max: 0.00095
+  lr_min: 0.000001  
+  test_model: true
+  train_num_workers: 2
+  val_num_workers: 1
+
+inference:
+  checkpoint_path: 'WAVEAI/5ts7pqls/checkpoints/epoch=6-step=4333.ckpt'
+  top_k: 150
