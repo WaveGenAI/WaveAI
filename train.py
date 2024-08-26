@@ -104,7 +104,7 @@ if __name__ == "__main__":
     valid_dataloader = DataLoader(
         dataset["test"],
         batch_size=config.train.batch_size,
-        num_workers=config.train.val_num_workers
+        num_workers=config.train.val_num_workers,
         collate_fn=collate_fn,
     )
 
