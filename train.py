@@ -97,17 +97,15 @@ if __name__ == "__main__":
     train_dataloader = DataLoader(
         dataset["train"],
         batch_size=config.train.batch_size,
-        num_workers=4,
+        num_workers=config.train.train_num_workers,
         collate_fn=collate_fn,
-        persistent_workers=True,
     )
 
     valid_dataloader = DataLoader(
         dataset["test"],
         batch_size=config.train.batch_size,
-        num_workers=2,
+        num_workers=config.train.val_num_workers
         collate_fn=collate_fn,
-        persistent_workers=True,
     )
 
     wandb_logger = WandbLogger(project="WAVEAI")
