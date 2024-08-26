@@ -1,81 +1,104 @@
-""" 
-Train script for WaveAI
-"""
-
-import os
-
 import lightning as L
 import torch
 import torch.multiprocessing as mp
+from datasets import load_dataset
 from lightning.pytorch.callbacks import LearningRateMonitor
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import WandbLogger
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
+from transformers import AutoTokenizer
 
+from model import text_encoder
 from model.config import Config
-from model.data import AudioPreprocessor
 from model.lightning_model import WaveAILightning
 
-lr_monitor = LearningRateMonitor(logging_interval="step")
-config = Config()
-data = AudioPreprocessor(config)
-
-dataset = data.get_dataset()
-print(dataset)
 torch.set_float32_matmul_precision("medium")
-# torch.set_printoptions(threshold=10000)
+config = Config()
 
-try:
-    mp.set_start_method("spawn")
-except RuntimeError:
-    pass
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+lr_monitor = LearningRateMonitor(logging_interval="step")
+tokenizer = AutoTokenizer.from_pretrained(config.model.tokenizer)
+text_enc = (
+    text_encoder.T5EncoderBaseModel(max_length=config.data.max_prompt_length)
+    .eval()
+    .to(device)
+)
 model = WaveAILightning()
 
-dataset = SynthDataset(overwrite=False)
 
-test_size = min(int(0.1 * len(dataset)), 200)
-train_size = len(dataset) - test_size
+# Define the collate function for processing batches
+@torch.no_grad()
+def collate_fn(rows):
+    codec = [torch.permute(row["codec"], (2, 1, 0)) for row in rows]
+    prompt = [row["prompt"] for row in rows]
+    lyrics = [row["lyrics"] for row in rows]
 
-num_workers = os.cpu_count() // 3
+    # Pad the codec tensors and stack them
+    codes = torch.nn.utils.rnn.pad_sequence(codec, batch_first=True, padding_value=-100)
+    codes = codes.permute(0, 3, 2, 1).contiguous()
 
-train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    # convert from batch x channel x num_codebooks x seq_length to batch x (num_codebooks x channels) x seq_length
+    codes = codes.view(codes.size(0), -1, codes.size(-1))
 
-train_loader = DataLoader(
-    train_dataset,
-    batch_size=config.train.batch_size,
-    shuffle=True,
-    collate_fn=dataset.collate_fn,
-    num_workers=num_workers // 2,
-)
-valid_loader = DataLoader(
-    test_dataset,
-    batch_size=config.train.batch_size,
-    shuffle=False,
-    collate_fn=dataset.collate_fn,
-    num_workers=num_workers // 2,
-)
+    # convert codes to long
+    codes = codes.long()
 
-wandb_logger = WandbLogger(project="WAVEAI")
+    # tokenize the lyrics
+    lyrics_ids = tokenizer(
+        lyrics,
+        padding=False,
+        truncation=True,
+        max_length=config.data.max_lyrics_length,
+        return_tensors="pt",
+    ).input_ids
 
-trainer = L.Trainer(
-    max_epochs=config.train.max_epochs,
-    callbacks=[lr_monitor, EarlyStopping(monitor="val_loss", mode="min")],
-    accumulate_grad_batches=config.train.accumulate_grad_batches,
-    gradient_clip_val=config.train.gradient_clip_val,
-    logger=wandb_logger,
-    log_every_n_steps=1,
-    default_root_dir="checkpoints",
-    precision="16-mixed",
-    devices="auto",
-    strategy="auto",
-    profiler="simple",
-)
+    # encode the prompt
+    prompts_embeds = text_enc(prompt)
+
+    return codes, prompts_embeds, lyrics_ids
 
 
 if __name__ == "__main__":
+    mp.set_start_method("spawn", force=True)
+
+    # Load the dataset
+    dataset = load_dataset("WaveGenAI/audio", streaming=True)
+    dataset = dataset.with_format("torch")
+
+    train_dataloader = DataLoader(
+        dataset["train"],
+        batch_size=config.train.batch_size,
+        num_workers=2,
+        collate_fn=collate_fn,
+        persistent_workers=True,
+    )
+
+    valid_dataloader = DataLoader(
+        dataset["test"],
+        batch_size=config.train.batch_size,
+        num_workers=2,
+        collate_fn=collate_fn,
+        persistent_workers=True,
+    )
+
+    wandb_logger = WandbLogger(project="WAVEAI")
+
+    trainer = L.Trainer(
+        max_epochs=config.train.max_epochs,
+        callbacks=[lr_monitor, EarlyStopping(monitor="val_loss", mode="min")],
+        accumulate_grad_batches=config.train.accumulate_grad_batches,
+        gradient_clip_val=config.train.gradient_clip_val,
+        logger=wandb_logger,
+        log_every_n_steps=1,
+        default_root_dir="checkpoints",
+        precision="16-mixed",
+        devices="auto",
+        strategy="auto",
+        profiler="simple",
+    )
+
     trainer.fit(
         model=model,
-        train_dataloaders=train_loader,
-        val_dataloaders=valid_loader,
+        train_dataloaders=train_dataloader,
+        val_dataloaders=valid_dataloader,
     )

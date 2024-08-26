@@ -60,9 +60,12 @@ class WaveAI(nn.Module):
                 self.config.model.cross_att_hidden_size, self.config.model.hidden_size
             )  # if text encoder returns a different hidden size than the model hidden size
 
+        self.num_codebooks = self.config.model.num_codebooks
+        if self.config.model.stereo:
+            self.num_codebooks = 2 * self.num_codebooks
+
         embds = {
-            k: self.config.model.codebook_size + 1
-            for k in range(self.config.model.num_codebooks)
+            k: self.config.model.codebook_size + 1 for k in range(self.num_codebooks)
         }
 
         self.decoder = MultiInputTransformerWrapper(
@@ -89,7 +92,7 @@ class WaveAI(nn.Module):
                 nn.Linear(
                     self.config.model.hidden_size, self.config.model.codebook_size
                 )
-                for _ in range(self.config.model.num_codebooks)
+                for _ in range(self.num_codebooks)
             ]
         )
 
@@ -120,7 +123,7 @@ class WaveAI(nn.Module):
 
         # create an embedding for each codebook
         x = {}
-        for k in range(self.config.model.num_codebooks):
+        for k in range(self.num_codebooks):
             x[k] = inputs_ids[:, k, :]
 
         # get the prepends embeddings
