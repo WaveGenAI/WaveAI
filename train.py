@@ -46,7 +46,7 @@ def collate_fn(rows):
     # tokenize the lyrics
     lyrics_ids = tokenizer(
         lyrics,
-        padding=False,
+        padding=True,
         truncation=True,
         max_length=config.data.max_lyrics_length,
         return_tensors="pt",
@@ -62,13 +62,13 @@ if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
 
     # Load the dataset
-    dataset = load_dataset("WaveGenAI/audio", streaming=True)
+    dataset = load_dataset(config.data.dataset_id)
     dataset = dataset.with_format("torch")
 
     train_dataloader = DataLoader(
         dataset["train"],
         batch_size=config.train.batch_size,
-        num_workers=2,
+        num_workers=4,
         collate_fn=collate_fn,
         persistent_workers=True,
     )

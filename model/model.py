@@ -55,6 +55,12 @@ class WaveAI(nn.Module):
             self.config.model.vocab_size, self.config.model.hidden_size
         )
 
+        # used in prepends embedding
+        self.pos_enc = PositionalEncoding(
+            self.config.model.hidden_size, self.config.data.max_lyrics_length
+        )
+
+        # cross attention projection
         if self.config.model.cross_att_hidden_size != self.config.model.hidden_size:
             self.cross_embd_proj = nn.Linear(
                 self.config.model.cross_att_hidden_size, self.config.model.hidden_size
@@ -94,10 +100,6 @@ class WaveAI(nn.Module):
                 )
                 for _ in range(self.num_codebooks)
             ]
-        )
-
-        self.pos_enc = PositionalEncoding(
-            self.config.model.hidden_size, self.config.model.max_lyrics_length
         )
 
     def forward(

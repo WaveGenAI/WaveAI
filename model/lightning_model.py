@@ -60,7 +60,7 @@ class WaveAILightning(L.LightningModule):
         self.audio_codec = audio_autoencoder()
         self.audio_codec.model.to("cpu")
 
-        self.nbm_sample_gen = 4  # skip first run when lightning module is initialized
+        self.nbm_sample_gen = -1  # skip first run when lightning module is initialized
 
     def step(self, batch, batch_idx) -> torch.Tensor:
         tgt_audio, prompts, lyrics = batch
@@ -72,14 +72,13 @@ class WaveAILightning(L.LightningModule):
         # cut the audio to the max length
         tgt_audio = tgt_audio[:, :, : self.config.model.max_seq_length]
 
+        # just for logging (to see the number of tokens)
+        self.log("nbm_token", tgt_audio.numel())
+
         # get the delay pattern, in this way each token is delayed by the same amount of time
         inputs, _ = self.delay_pattern.build_delay_pattern_mask(
             tgt_audio, self.config.model.pad_token_id, self.config.model.max_seq_length
         )
-
-        # just for logging
-        nbm_val = inputs.numel()
-        self.log("nbm_token", nbm_val)
 
         # shift the tokens to the right (like that the model will predict the next token and will not see the future)
         inputs = self.delay_pattern.shift_tokens_right(
@@ -136,7 +135,7 @@ class WaveAILightning(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        if self.nbm_sample_gen < 3:
+        if self.nbm_sample_gen < 4 and self.nbm_sample_gen != -1:
             # run experiment on a single sample from batch
             prompts = batch[1][0].unsqueeze(0)
             lyrics = batch[2][0].unsqueeze(0)
