@@ -15,7 +15,7 @@ from model.config import Config
 from model.lightning_model import WaveAILightning
 
 args = argparse.ArgumentParser()
-args.add_argument("--save_path", type=str, default="checkpoints", required=True)
+args.add_argument("--save_path", type=str, default="checkpoints", required=False)
 args = args.parse_args()
 
 torch.set_float32_matmul_precision("medium")
@@ -91,24 +91,25 @@ def collate_fn(rows):
 
 
 if __name__ == "__main__":
-    mp.set_start_method("spawn", force=True)
+    mp.set_start_method("spawn")
 
     # Load the dataset
-    dataset = load_dataset(config.data.dataset_id)
-    dataset = dataset.with_format("torch")
+    train_ds, test_ds = load_dataset(config.data.dataset_id, split=["train", "test"])
+    train_ds = train_ds.with_format("torch")
+    test_ds = test_ds.with_format("torch")
 
     # shuffle the dataset
-    dataset = dataset.shuffle(seed=42)
+    train_ds = train_ds.shuffle(seed=42)
 
     train_dataloader = DataLoader(
-        dataset["train"],
+        train_ds,
         batch_size=config.train.batch_size,
         num_workers=config.train.train_num_workers,
         collate_fn=collate_fn,
     )
 
     valid_dataloader = DataLoader(
-        dataset["test"],
+        test_ds,
         batch_size=config.train.batch_size,
         num_workers=config.train.val_num_workers,
         collate_fn=collate_fn,

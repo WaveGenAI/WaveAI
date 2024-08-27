@@ -4,7 +4,6 @@ import bitsandbytes as bnb
 import lightning as L
 import torch
 from audiotools import AudioSignal
-from torch import optim
 from torch.nn import CrossEntropyLoss
 from torch.optim import lr_scheduler
 from torchmetrics import Metric
