@@ -101,7 +101,7 @@ class WaveAILightning(L.LightningModule):
 
         loss = torch.zeros([], device=self.device)
 
-        for codebook in range(self.config.model.num_codebooks):
+        for codebook in range(self.num_codebooks):
             logits_k = (
                 logits[:, codebook, ...].contiguous().view(-1, logits.size(-1))
             )  # [B x T, prob]
@@ -113,7 +113,7 @@ class WaveAILightning(L.LightningModule):
 
             loss += self.loss_fn[0](logits_k, targets_k)
 
-        loss = loss / self.config.model.num_codebooks
+        loss = loss / self.num_codebooks
 
         return loss
 

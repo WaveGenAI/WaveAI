@@ -24,6 +24,7 @@ class Generation:
         if self.model.config.model.stereo:
             num_codebooks = 2 * num_codebooks
 
+        # shape: [batch_size, channel * num_codebooks, seq_length]
         input_ids = torch.ones((1, num_codebooks, 1))
         input_ids += self.model.config.model.pad_token_id - 1
 
@@ -70,6 +71,11 @@ class Generation:
 
         if self.model.config.model.stereo:
             # convert 1 x (num_codebooks x channels) x seq_length to 2 x num_codebooks x seq_length
-            output_ids = output_ids.view(2, self.model.config.model.num_codebooks, -1)
+            output_ids = output_ids.view(
+                1, 2, self.model.config.model.num_codebooks, -1
+            )
+
+            # remove the batch dimension
+            output_ids = output_ids.squeeze(0)
 
         return output_ids
