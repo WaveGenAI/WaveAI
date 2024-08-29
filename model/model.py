@@ -66,6 +66,8 @@ class WaveAI(nn.Module):
         x_bis = {}
         for k in range(self.num_codebooks):
             x_bis[k] = x[:, k, :]
+
+        # x = sum([emb(x[:, i, :]) for i, emb in enumerate(self.emb)])
         x = self.transformer(x_bis)
         # x = self.out_norm(x)
         x = torch.stack([linear(x) for linear in self.linears], dim=1)
