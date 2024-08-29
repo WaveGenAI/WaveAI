@@ -49,52 +49,59 @@ class WaveAILightning(L.LightningModule):
 
         self.config = config
         self.delay_pattern = DelayPattern()
-        self.model = WaveAI(self.config)
+
+        self.num_codebooks = self.config.model.num_codebooks
+        if self.config.model.stereo:
+            self.num_codebooks = self.num_codebooks * 2
+
+        self.model = WaveAI(
+            self.num_codebooks,
+            self.config.model.codebook_size,
+            self.config.model.hidden_size,
+            self.config.model.decoder_depth,
+            self.config.model.decoder_heads,
+        )
         self.save_hyperparameters()
 
         # put in list to avoid training in the pytorch-lightning (a bit hacky)
         self.loss_metric = [LossTensor()]
         self.loss_fn = [CrossEntropyLoss()]
 
-        self.generator = Generation(self.model)
+        self.generator = Generation(
+            self.model,
+            self.num_codebooks,
+            self.config.model.pad_token_id,
+            self.config.model.stereo,
+        )
         self.audio_codec = audio_autoencoder()
         self.audio_codec.model.to("cpu")
 
-        self.num_codebooks = self.config.model.num_codebooks
-        if self.config.model.stereo:
-            self.num_codebooks = self.num_codebooks * 2
-
     def step(self, batch, batch_idx) -> torch.Tensor:
-        tgt_audio, prompts, lyrics = batch
+        audio, _, _ = batch
 
-        tgt_audio = tgt_audio.to(self.device)
-        prompts = prompts.to(self.device)
-        lyrics = lyrics.to(self.device)
+        audio = audio.to(self.device)
 
         # cut the audio to the max length
-        tgt_audio = tgt_audio[:, :, : self.config.model.max_seq_length]
+        audio = audio[:, :, : self.config.model.max_seq_length]
 
         # just for logging (to see the number of tokens)
-        self.log("nbm_token", tgt_audio.numel())
+        self.log("nbm_token", audio.numel())
 
         # get the delay pattern, in this way each token is delayed by the same amount of time
-        inputs, _ = self.delay_pattern.build_delay_pattern_mask(
-            tgt_audio, self.config.model.pad_token_id, self.config.model.max_seq_length
+        tokens, _ = self.delay_pattern.build_delay_pattern_mask(
+            audio, self.config.model.pad_token_id, self.config.model.max_seq_length
         )
 
         # shift the tokens to the right (like that the model will predict the next token and will not see the future)
-        inputs = self.delay_pattern.shift_tokens_right(
-            inputs, self.config.model.pad_token_id, self.config.model.pad_token_id
+        tokens = self.delay_pattern.shift_tokens_right(
+            tokens, self.config.model.pad_token_id, self.config.model.pad_token_id
         ).to(self.device)
 
         # create the inputs and labels tensors
-        inputs_ids = inputs[..., :-1]
-        labels = inputs[..., 1:]
+        inputs_ids = tokens[..., :-1]
+        labels = tokens[..., 1:]
 
-        logits = self.model(inputs_ids, prompts, lyrics)
-
-        # get logits values without prepends embedding
-        logits = logits[..., -labels.size(-1) :, :]
+        logits = self.model(inputs_ids)
 
         # ignore the pad token (when pytorch see -100 in the labels it will ignore it)
         labels = labels.masked_fill(labels == self.config.model.pad_token_id, -100)
@@ -102,14 +109,8 @@ class WaveAILightning(L.LightningModule):
         loss = torch.zeros([], device=self.device)
 
         for codebook in range(self.num_codebooks):
-            logits_k = (
-                logits[:, codebook, ...].contiguous().view(-1, logits.size(-1))
-            )  # [B x T, prob]
+            logits_k = logits[:, codebook, ...].contiguous().view(-1, logits.size(-1))
             targets_k = labels[:, codebook, ...].contiguous().view(-1)  # [B x T]
-
-            # get index of the most probable token
-            # max_prob_idx = logits_k.argmax(dim=-1)
-            # print(targets_k[..., 10:20], max_prob_idx[..., 10:20])
 
             loss += self.loss_fn[0](logits_k, targets_k)
 
@@ -117,20 +118,13 @@ class WaveAILightning(L.LightningModule):
 
         return loss
 
+    @torch.no_grad()
     def test_model(self, batch):
         if not self.config.train.test_model:
             return
 
-        # run experiment on a single sample from batch
-        prompts = batch[1][0].unsqueeze(0)
-        lyrics = batch[2][0].unsqueeze(0)
-
-        prompts = prompts.to(self.device)
-        lyrics = lyrics.to(self.device)
-
-        output_ids = self.generator.sampling(prompts, lyrics)
-        with torch.no_grad():
-            y = self.audio_codec.decode(output_ids)
+        tokens = self.generator.sampling()
+        y = self.audio_codec.decode(tokens)
 
         y = AudioSignal(y.cpu().numpy(), sample_rate=self.audio_codec.model.sample_rate)
 

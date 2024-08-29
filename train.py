@@ -119,7 +119,7 @@ if __name__ == "__main__":
 
     trainer = L.Trainer(
         max_epochs=config.train.max_epochs,
-        callbacks=[lr_monitor, EarlyStopping(monitor="val_loss", mode="min")],
+        callbacks=[lr_monitor],
         accumulate_grad_batches=config.train.accumulate_grad_batches,
         gradient_clip_val=config.train.gradient_clip_val,
         logger=wandb_logger,

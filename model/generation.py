@@ -5,77 +5,56 @@ from model.pattern import DelayPattern
 
 
 class Generation:
-    def __init__(self, model: torch.nn.Module):
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        num_codebooks: int,
+        pad_token: int,
+        stereo: bool = False,
+    ) -> None:
         self.model = model
         self.pattern = DelayPattern()
+
+        self.stereo = stereo
+        self.num_codebooks = num_codebooks
+        self.pad_token = pad_token
 
     def beam_search(self, *args, **kwargs):
         raise NotImplementedError
 
     def sampling(
         self,
-        cross_att_emb: torch.Tensor,
-        prepends_ids: torch.Tensor,
+        duration=10,
         temperature: float = 1,
-        top_k: int = 250,
+        top_k: int = 150,
     ) -> torch.Tensor:
+        # tokens: [batch_size, channel * num_codebooks, seq_length]
+        tokens = (
+            torch.ones((1, self.num_codebooks, 1), dtype=torch.long) * self.pad_token
+        ).to("cuda")
 
-        num_codebooks = self.model.config.model.num_codebooks
-        if self.model.config.model.stereo:
-            num_codebooks = 2 * num_codebooks
+        step = duration * 86
+        for i in range(step):
+            logits = self.model(tokens)
 
-        # shape: [batch_size, channel * num_codebooks, seq_length]
-        input_ids = torch.ones((1, num_codebooks, 1))
-        input_ids += self.model.config.model.pad_token_id - 1
-
-        output_ids, mask = self.pattern.build_delay_pattern_mask(
-            input_ids,
-            pad_token_id=self.model.config.model.pad_token_id,
-            max_seq_length=self.model.config.model.max_seq_length,
-        )
-
-        steps = min(
-            1000,
-            self.model.config.model.max_seq_length
-            - output_ids.size(-1)
-            - prepends_ids.size(-1),
-        )
-
-        for i in range(steps):
-            inputs_ids_pred = self.pattern.apply_delay_pattern_mask(output_ids, mask)
-            inputs_ids_pred = inputs_ids_pred.to(prepends_ids.device)
-
-            # convert prepends_ids to long and input_ids to long
-            inputs_ids_pred = inputs_ids_pred.long()
-            prepends_ids = prepends_ids.long()
-
-            logits = self.model(inputs_ids_pred, cross_att_emb, prepends_ids)
-
-            last_toks_logits = logits[
-                :, :, -1, :
-            ]  # shape: [batch_size, num_heads, vocab_size]
-
-            v, _ = torch.topk(last_toks_logits, min(top_k, logits.size(-1)))
-            last_toks_logits[last_toks_logits < v[..., -1, None]] = float("-inf")
-
-            probs = F.softmax(last_toks_logits, dim=-1)
-            probs = (probs / temperature).squeeze(0)
-
-            item_next = torch.multinomial(probs, num_samples=1).to(torch.int32)
-            output_ids = torch.cat((output_ids, item_next[None, ...].cpu()), dim=-1)
-
-            print(f"Step {i + 1} / {steps}", end="\r")
-
-        output_ids = self.pattern.apply_delay_pattern_mask(output_ids, mask)
-        output_ids = self.pattern.reverse_delay_pattern_mask(output_ids)[..., 1:]
-
-        if self.model.config.model.stereo:
-            # convert 1 x (num_codebooks x channels) x seq_length to 2 x num_codebooks x seq_length
-            output_ids = output_ids.view(
-                1, 2, self.model.config.model.num_codebooks, -1
+            topk, indices = logits[:, :, -1, :].topk(top_k, dim=-1)
+            topk = F.softmax((topk / temperature), dim=-1)
+            samples = torch.multinomial(topk.view((-1, top_k)), 1).view(
+                topk.shape[:-1] + (1,)
             )
+            new_tokens = torch.gather(indices, dim=-1, index=samples)
+
+            tokens = torch.cat([tokens, new_tokens.long()], dim=2)
+
+            print(f"Step {i + 1} / {step}", end="\r")
+
+        tokens = self.pattern.reverse_delay_pattern_mask(tokens)[..., 1:]
+
+        if self.stereo:
+            # convert 1 x (num_codebooks x channels) x seq_length to 2 x num_codebooks x seq_length
+            tokens = tokens.view(1, 2, self.num_codebooks // 2, -1)
 
             # remove the batch dimension
-            output_ids = output_ids.squeeze(0)
+            tokens = tokens.squeeze(0)
 
-        return output_ids
+        return tokens

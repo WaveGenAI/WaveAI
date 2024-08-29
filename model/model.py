@@ -4,143 +4,69 @@ Class for the main model (music generation)
 
 import torch
 import torch.nn as nn
+
+# from .transformer import Transformer
 from x_transformers import Decoder, MultiInputTransformerWrapper
-
-
-class PositionalEncoding(nn.Module):
-    """Layer that add the sinusoidal positionnal encoding"""
-
-    def __init__(self, dim_model: int, max_seq_len: int):
-        """Initialize the PositionalEncoding layer
-
-        Args:
-            dim_model (int): the model dimension
-            max_seq_len (int): the maximum sequence length
-        """
-
-        super().__init__()
-
-        pe = torch.zeros((1, max_seq_len, dim_model))
-
-        pos = torch.arange(max_seq_len).unsqueeze(1)
-        divid = 10_000 ** (torch.arange(0, dim_model, 2) / dim_model)
-
-        pe[0, :, 0::2] = torch.sin(pos / divid)
-        pe[0, :, 1::2] = torch.cos(pos / divid)
-
-        self._pe = pe
-
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        """A method that adds the positional encoding to the input tensor
-
-        Args:
-            inputs (torch.Tensor): the input tensor
-
-        Returns:
-            torch.Tensor: the input tensor with the positional encoding
-        """
-
-        self._pe = self._pe.to(inputs.device)
-        return inputs + self._pe[:, : inputs.shape[1], :]
 
 
 class WaveAI(nn.Module):
     """WaveAI model class"""
 
-    def __init__(self, config):
+    def __init__(
+        self,
+        codebook_count: int,
+        codebook_size: int,
+        dim: int,
+        depth: int,
+        num_heads: int,
+    ):
         super().__init__()
-        self.config = config
 
-        self.prepends_embedding = nn.Embedding(
-            self.config.model.vocab_size, self.config.model.hidden_size
+        self.emb = nn.ModuleList(
+            [nn.Embedding(codebook_size + 1, dim) for _ in range(codebook_count)]
         )
 
-        # used in prepends embedding
-        self.pos_enc = PositionalEncoding(
-            self.config.model.hidden_size, self.config.data.max_lyrics_length
-        )
+        # self.transformer = Transformer(dim=dim, depth=depth, heads=num_heads)
 
-        # cross attention projection
-        if self.config.model.cross_att_hidden_size != self.config.model.hidden_size:
-            self.cross_embd_proj = nn.Linear(
-                self.config.model.cross_att_hidden_size, self.config.model.hidden_size
-            )  # if text encoder returns a different hidden size than the model hidden size
+        embds = {k: codebook_size + 1 for k in range(codebook_count)}
 
-        self.num_codebooks = self.config.model.num_codebooks
-        if self.config.model.stereo:
-            self.num_codebooks = 2 * self.num_codebooks
-
-        embds = {
-            k: self.config.model.codebook_size + 1 for k in range(self.num_codebooks)
-        }
-
-        self.decoder = MultiInputTransformerWrapper(
+        self.transformer = MultiInputTransformerWrapper(
             num_tokens=embds,
-            max_seq_len=self.config.model.max_seq_length,
+            max_seq_len=4096,
             return_only_embed=True,
             attn_layers=Decoder(
-                dim=self.config.model.hidden_size,
-                depth=self.config.model.decoder_depth,
-                heads=self.config.model.decoder_heads,
+                dim=dim,
+                depth=depth,
+                heads=num_heads,
                 attn_flash=True,
                 rotary_pos_emb=True,
-                cross_attend=True,
             ),
         )
 
-        # each head predicts a codebook (not its index)
-        self.lm_heads = nn.ModuleList(
-            [
-                nn.Linear(
-                    self.config.model.hidden_size, self.config.model.codebook_size
-                )
-                for _ in range(self.num_codebooks)
-            ]
+        self.out_norm = nn.LayerNorm(dim)
+        self.linears = nn.ModuleList(
+            [nn.Linear(dim, codebook_size, bias=False) for _ in range(codebook_count)]
         )
+
+        self.num_codebooks = codebook_count
 
     def forward(
         self,
-        inputs_ids: torch.Tensor,
-        cross_att_embs: torch.Tensor,
-        prepends_ids: torch.Tensor,
+        x: torch.Tensor,
     ) -> torch.tensor:
         """Forward pass through the model
 
         Args:
-            inputs_ids (torch.tensor): a tensor that represent the codebook idx of shape
+            x (torch.tensor): a tensor that represent the codebook idx of shape
                 (batch_size, num_codebooks, length)
-            cross_att_embs (torch.tensor): a tensor that represent the cross attention embedding of the prompt
-            prepends_ids (torch.tensor): a tensor that represent the prepends idx of shape
         Returns:
             torch.tensor: a tensor that represent the logits prob
         """
 
-        inputs_ids = inputs_ids.masked_fill(
-            inputs_ids == -100, self.config.model.pad_token_id
-        )
-
-        # create an embedding for each codebook
-        x = {}
+        x_bis = {}
         for k in range(self.num_codebooks):
-            x[k] = inputs_ids[:, k, :]
-
-        # get the prepends embeddings
-        prepends_embds = self.prepends_embedding(prepends_ids)
-
-        # add the positional encoding to the prepends embeddings
-        prepends_embds = self.pos_enc(prepends_embds)
-
-        # project the cross attention embeddings if needed
-        if cross_att_embs.size(-1) != self.config.model.hidden_size:
-            cross_att_embs = self.cross_embd_proj(cross_att_embs)
-
-        # pass the embeddings through the decoder
-        hidden_space = self.decoder(
-            x, prepend_embeds=prepends_embds, context=cross_att_embs
-        )
-
-        logits = torch.stack(
-            [lm_head(hidden_space) for lm_head in self.lm_heads], dim=1
-        )
-
-        return logits
+            x_bis[k] = x[:, k, :]
+        x = self.transformer(x_bis)
+        # x = self.out_norm(x)
+        x = torch.stack([linear(x) for linear in self.linears], dim=1)
+        return x
