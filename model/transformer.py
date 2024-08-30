@@ -91,7 +91,7 @@ class Transformer(nn.Module):
         depth: int = 24,
         ff_dim: int = 4096,
         heads: int = 16,
-        dropout: float = 0.0,
+        dropout: float = 0.1,
     ):
         super().__init__()
         self.layers = nn.ModuleList(

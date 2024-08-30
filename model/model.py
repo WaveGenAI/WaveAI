@@ -5,7 +5,7 @@ Class for the main model (music generation)
 import torch
 import torch.nn as nn
 
-# from .transformer import Transformer
+from .transformer import Transformer
 from x_transformers import Decoder, MultiInputTransformerWrapper
 
 
@@ -26,22 +26,7 @@ class WaveAI(nn.Module):
             [nn.Embedding(codebook_size + 1, dim) for _ in range(codebook_count)]
         )
 
-        # self.transformer = Transformer(dim=dim, depth=depth, heads=num_heads)
-
-        embds = {k: codebook_size + 1 for k in range(codebook_count)}
-
-        self.transformer = MultiInputTransformerWrapper(
-            num_tokens=embds,
-            max_seq_len=4096,
-            return_only_embed=True,
-            attn_layers=Decoder(
-                dim=dim,
-                depth=depth,
-                heads=num_heads,
-                attn_flash=True,
-                rotary_pos_emb=True,
-            ),
-        )
+        self.transformer = Transformer(dim=dim, depth=depth, heads=num_heads)
 
         self.out_norm = nn.LayerNorm(dim)
         self.linears = nn.ModuleList(
@@ -63,12 +48,10 @@ class WaveAI(nn.Module):
             torch.tensor: a tensor that represent the logits prob
         """
 
-        x_bis = {}
-        for k in range(self.num_codebooks):
-            x_bis[k] = x[:, k, :]
-
-        # x = sum([emb(x[:, i, :]) for i, emb in enumerate(self.emb)])
-        x = self.transformer(x_bis)
-        # x = self.out_norm(x)
+        x = sum([emb(x[:, i, :]) for i, emb in enumerate(self.emb)])
+        x = self.transformer(
+            x, cross_attention_src=torch.zeros((1, 1, 1024)).to(x.device)
+        )
+        x = self.out_norm(x)
         x = torch.stack([linear(x) for linear in self.linears], dim=1)
         return x
