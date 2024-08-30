@@ -23,7 +23,7 @@ class MultiheadAttention(nn.Module):
         ) // 2  # rotary embedding dim = dim of each head / 2
         self.rotary_emb = RotaryEmbedding(dim=rotary_dim)
 
-    def forward(self, query, key, value):
+    def forward(self, query, key, value, padding_mask=None):
         if not self.cross_attention:
             key = query
             value = query
@@ -31,14 +31,15 @@ class MultiheadAttention(nn.Module):
         q = F.linear(query, self.in_proj_weight[: self.embed_dim])
         k = F.linear(key, self.in_proj_weight[self.embed_dim : 2 * self.embed_dim])
         v = F.linear(value, self.in_proj_weight[2 * self.embed_dim :])
+
         q, k, v = [
             x.reshape(
-                x.shape[0], x.shape[1], self.num_heads, x.shape[2] // self.num_heads
+                x.shape[0], self.num_heads, x.shape[1], x.shape[2] // self.num_heads
             )
             for x in [q, k, v]
         ]
 
-        B, T, h, d = q.shape
+        B, h, T, d = q.shape
 
         # apply rotary embedding to queries and keys (if not cross-attention)
         q = self.rotary_emb.rotate_queries_or_keys(q)
@@ -46,8 +47,21 @@ class MultiheadAttention(nn.Module):
         if not self.cross_attention:
             k = self.rotary_emb.rotate_queries_or_keys(k)
 
-        x = flash_attn_func(q, k, v, causal=self.causal)
-        x = x.view(B, T, self.embed_dim)
+        # create causal mask
+        temp_mask = torch.ones(
+            B, q.size(-2), k.size(-2), dtype=torch.bool, device=q.device
+        )
+
+        if self.causal:
+            temp_mask = temp_mask.tril(diagonal=0)
+
+        # apply flash attention
+        with torch.backends.cuda.sdp_kernel(
+            enable_flash=True, enable_math=True, enable_mem_efficient=True
+        ):
+            x = F.scaled_dot_product_attention(q, k, v, attn_mask=temp_mask)
+
+        x = x.reshape(B, T, self.embed_dim)
         x = self.out_proj(x)
         return x, None
 
@@ -83,13 +97,13 @@ class TransformerLayer(nn.Module):
         self.linear2 = nn.Linear(ff_dim, dim, bias=False)
         self.dropout2 = nn.Dropout(dropout)
 
-    def forward(self, x, cross_attention_src):
+    def forward(self, x, memory, memory_key_padding_mask=None):
         x_ = self.norm1(x)
         x = x + self.dropout1(self.self_attn(x_, x_, x_)[0])
 
         x_ = self.norm_cross(x)
         x = x + self.dropout_cross(
-            self.cross_attention(x_, cross_attention_src, cross_attention_src)[0]
+            self.cross_attention(x_, memory, memory, memory_key_padding_mask)[0]
         )
 
         x_ = self.norm2(x)
@@ -111,7 +125,11 @@ class Transformer(nn.Module):
             [TransformerLayer(dim, ff_dim, heads, dropout) for _ in range(depth)]
         )
 
-    def forward(self, x, cross_attention_src):
+    def forward(self, x, memory, memory_key_padding_mask=None):
         for layer in self.layers:
-            x = layer(x, cross_attention_src=cross_attention_src)
+            x = layer(
+                x,
+                memory=memory,
+                memory_key_padding_mask=memory_key_padding_mask,
+            )
         return x

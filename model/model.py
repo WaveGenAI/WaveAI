@@ -37,20 +37,21 @@ class WaveAI(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
+        memory: torch.Tensor = None,
     ) -> torch.tensor:
         """Forward pass through the model
 
         Args:
             x (torch.tensor): a tensor that represent the codebook idx of shape
                 (batch_size, num_codebooks, length)
+            memory (torch.tensor): a tensor that will fee the cross attention of shape
+                (batch_size, seq_len, dim)
         Returns:
             torch.tensor: a tensor that represent the logits prob
         """
 
         x = sum([emb(x[:, i, :]) for i, emb in enumerate(self.emb)])
-        x = self.transformer(
-            x, cross_attention_src=torch.zeros((1, 1, 1024)).to(x.device)
-        )
+        x = self.transformer(x, memory=torch.zeros((1, 1, 1024)).to(x.device))
         x = self.out_norm(x)
         x = torch.stack([linear(x) for linear in self.linears], dim=1)
         return x
