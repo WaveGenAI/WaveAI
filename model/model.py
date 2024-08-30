@@ -6,7 +6,6 @@ import torch
 import torch.nn as nn
 
 from .transformer import Transformer
-from x_transformers import Decoder, MultiInputTransformerWrapper
 
 
 class WaveAI(nn.Module):

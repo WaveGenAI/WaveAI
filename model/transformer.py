@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from flash_attn import flash_attn_func
+from rotary_embedding_torch import RotaryEmbedding
 from torch import nn
 
 
@@ -16,6 +17,11 @@ class MultiheadAttention(nn.Module):
 
         self.in_proj_weight = nn.Parameter(torch.rand((embed_dim * 3, embed_dim)))
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=False)
+
+        rotary_dim = (
+            embed_dim // num_heads
+        ) // 2  # rotary embedding dim = dim of each head / 2
+        self.rotary_emb = RotaryEmbedding(dim=rotary_dim)
 
     def forward(self, query, key, value):
         if not self.cross_attention:
@@ -33,6 +39,13 @@ class MultiheadAttention(nn.Module):
         ]
 
         B, T, h, d = q.shape
+
+        # apply rotary embedding to queries and keys (if not cross-attention)
+        q = self.rotary_emb.rotate_queries_or_keys(q)
+
+        if not self.cross_attention:
+            k = self.rotary_emb.rotate_queries_or_keys(k)
+
         x = flash_attn_func(q, k, v, causal=self.causal)
         x = x.view(B, T, self.embed_dim)
         x = self.out_proj(x)
@@ -98,16 +111,7 @@ class Transformer(nn.Module):
             [TransformerLayer(dim, ff_dim, heads, dropout) for _ in range(depth)]
         )
 
-    def pos_embed(self, x):
-        B, T, dim = x.shape
-        positions = (
-            torch.arange(T, device=x.device).view(1, -1, 1).to(x.dtype).to(x.device)
-        )
-        x = x + create_sin_embedding(positions, dim)
-        return x
-
     def forward(self, x, cross_attention_src):
-        x = self.pos_embed(x)
         for layer in self.layers:
             x = layer(x, cross_attention_src=cross_attention_src)
         return x

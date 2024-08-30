@@ -22,5 +22,7 @@ lightning
 bitsandbytes
 encodec
 torchmetrics
+rotary-embedding-torch
+
 git+https://github.com/WaveGenAI/SemantiCodec-inference.git
 git+https://github.com/WaveGenAI/descript-audio-codec.git

@@ -34,7 +34,12 @@ class Generation:
         ).to("cuda")
 
         step = duration * 86
+        tokens, padding_mask = self.pattern.build_delay_pattern_mask(
+            tokens, self.pad_token, step
+        )
+
         for i in range(step):
+            tokens = self.pattern.apply_delay_pattern_mask(tokens, padding_mask)
             logits = self.model(tokens)
 
             topk, indices = logits[:, :, -1, :].topk(top_k, dim=-1)

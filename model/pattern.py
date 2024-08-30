@@ -36,7 +36,10 @@ class DelayPattern:
         b, k, seq_len = input_ids.shape
 
         delays_ids = torch.full(
-            (b, k, max_seq_length + (k - 1)), pad_token_id, dtype=torch.long
+            (b, k, max_seq_length + (k - 1)),
+            pad_token_id,
+            dtype=torch.long,
+            device=input_ids.device,
         )
 
         for k_idx in range(k):
@@ -47,7 +50,9 @@ class DelayPattern:
         for k_idx in range(k):
             delays_ids[:, k_idx, k_idx : seq_len + k_idx] = input_ids[:, k_idx, :]
 
-        mask = torch.where(delays_ids == pad_token_id, pad_token_id, -1)
+        mask = torch.where(delays_ids == pad_token_id, pad_token_id, -1).to(
+            input_ids.device
+        )
         return delays_ids[..., :seq_len], mask
 
     @staticmethod
@@ -58,10 +63,10 @@ class DelayPattern:
         seq_len = input_ids.shape[-1]
         decoder_pad_token_mask = decoder_pad_token_mask[..., :seq_len]
 
-        input_ids = torch.where(
+        input_ids_pad = torch.where(
             decoder_pad_token_mask == -1, input_ids, decoder_pad_token_mask
-        )
-        return input_ids
+        ).to(input_ids.device)
+        return input_ids_pad
 
     @staticmethod
     def shift_tokens_right(
