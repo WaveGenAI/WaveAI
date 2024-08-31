@@ -55,6 +55,16 @@ class MultiheadAttention(nn.Module):
         if self.causal:
             temp_mask = temp_mask.tril(diagonal=0)
 
+        if padding_mask is not None:
+            # be sure that padding mask is boolean
+            padding_mask = padding_mask.bool()
+
+            # temp_mask is [B, QT, KT] and padding_mask is [B, KT] so expand padding mask to [B, 1, KT]
+            padding_mask = padding_mask.unsqueeze(1)
+
+            # apply padding mask to temp_mask
+            temp_mask = temp_mask & padding_mask
+
         # apply flash attention
         with torch.backends.cuda.sdp_kernel(
             enable_flash=True, enable_math=True, enable_mem_efficient=True

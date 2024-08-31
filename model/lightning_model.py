@@ -60,6 +60,7 @@ class WaveAILightning(L.LightningModule):
             self.config.model.hidden_size,
             self.config.model.decoder_depth,
             self.config.model.decoder_heads,
+            self.config.model.memory_dim,
         )
         self.save_hyperparameters()
 

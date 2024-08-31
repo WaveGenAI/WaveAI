@@ -18,6 +18,7 @@ class WaveAI(nn.Module):
         dim: int,
         depth: int,
         num_heads: int,
+        memory_dim: int,
     ):
         super().__init__()
 
@@ -33,6 +34,11 @@ class WaveAI(nn.Module):
         )
 
         self.num_codebooks = codebook_count
+
+        if memory_dim != dim:
+            self.memory_proj = nn.Linear(memory_dim, dim)
+        else:
+            self.memory_proj = nn.Identity()
 
     def forward(
         self,
@@ -53,7 +59,9 @@ class WaveAI(nn.Module):
         """
 
         x = sum([emb(x[:, i, :]) for i, emb in enumerate(self.emb)])
-        x = self.transformer(x, memory=torch.zeros((1, 1, 1024)).to(x.device))
+
+        memory = self.memory_proj(memory).to(x.device)
+        x = self.transformer(x, memory, memory_key_padding_mask)
         x = self.out_norm(x)
         x = torch.stack([linear(x) for linear in self.linears], dim=1)
         return x
