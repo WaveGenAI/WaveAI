@@ -38,6 +38,7 @@ class WaveAI(nn.Module):
         self,
         x: torch.Tensor,
         memory: torch.Tensor = None,
+        memory_key_padding_mask: torch.Tensor = None,
     ) -> torch.tensor:
         """Forward pass through the model
 
@@ -46,6 +47,7 @@ class WaveAI(nn.Module):
                 (batch_size, num_codebooks, length)
             memory (torch.tensor): a tensor that will fee the cross attention of shape
                 (batch_size, seq_len, dim)
+            memory_key_padding_mask (torch.tensor): a tensor that will mask the memory
         Returns:
             torch.tensor: a tensor that represent the logits prob
         """

@@ -39,8 +39,8 @@ class DelayPattern:
             (b, k, max_seq_length + (k - 1)),
             pad_token_id,
             dtype=torch.long,
-            device=input_ids.device,
         )
+        delays_ids = delays_ids.to(input_ids)
 
         for k_idx in range(k):
             delays_ids[:, k_idx, k_idx : max_seq_length + k_idx] = torch.full_like(
@@ -50,9 +50,8 @@ class DelayPattern:
         for k_idx in range(k):
             delays_ids[:, k_idx, k_idx : seq_len + k_idx] = input_ids[:, k_idx, :]
 
-        mask = torch.where(delays_ids == pad_token_id, pad_token_id, -1).to(
-            input_ids.device
-        )
+        mask = torch.where(delays_ids == pad_token_id, pad_token_id, -1)
+        mask = mask.to(input_ids)
         return delays_ids[..., :seq_len], mask
 
     @staticmethod
@@ -65,36 +64,37 @@ class DelayPattern:
 
         input_ids_pad = torch.where(
             decoder_pad_token_mask == -1, input_ids, decoder_pad_token_mask
-        ).to(input_ids.device)
+        )
+        input_ids_pad = input_ids_pad.to(input_ids)
         return input_ids_pad
 
     @staticmethod
     def shift_tokens_right(
-        inputs_ids_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int
+        inputs_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int
     ):
         """
         Shift input ids one token to the right.
         """
         # transpose to get (bsz, num_codebooks, seq_len)
         # inputs_ids_ids = inputs_ids_ids.transpose(1, 2)
-        shifted_inputs_ids_ids = inputs_ids_ids.new_zeros(inputs_ids_ids.shape)
-        shifted_inputs_ids_ids[..., 1:] = inputs_ids_ids[..., :-1].clone()
+        shifted_inputs_ids = inputs_ids.new_zeros(inputs_ids.shape)
+        shifted_inputs_ids = shifted_inputs_ids.to(inputs_ids)
+
+        shifted_inputs_ids[..., 1:] = inputs_ids[..., :-1].clone()
         if decoder_start_token_id is None:
             raise ValueError(
                 "Make sure to set the decoder_start_token_id attribute of the model's configuration."
             )
-        shifted_inputs_ids_ids[..., 0] = decoder_start_token_id
+        shifted_inputs_ids[..., 0] = decoder_start_token_id
 
         if pad_token_id is None:
             raise ValueError(
                 "Make sure to set the pad_token_id attribute of the model's configuration."
             )
         # replace possible -100 values in labels by `pad_token_id`
-        shifted_inputs_ids_ids.masked_fill_(
-            shifted_inputs_ids_ids == -100, pad_token_id
-        )
+        shifted_inputs_ids.masked_fill_(shifted_inputs_ids == -100, pad_token_id)
 
-        return shifted_inputs_ids_ids
+        return shifted_inputs_ids
 
     def reverse_delay_pattern_mask(self, input_ids):
         """Reverse the delay pattern mask to the input_ids. This is used to predict the next token in the sequence"""

@@ -77,9 +77,7 @@ class WaveAILightning(L.LightningModule):
         self.audio_codec.model.to("cpu")
 
     def step(self, batch, batch_idx) -> torch.Tensor:
-        audio, _, _ = batch
-
-        audio = audio.to(self.device)
+        audio, prompts, prompts_masks, _ = batch
 
         # cut the audio to the max length
         audio = audio[:, :, : self.config.model.max_seq_length]
@@ -95,13 +93,13 @@ class WaveAILightning(L.LightningModule):
         # shift the tokens to the right (like that the model will predict the next token and will not see the future)
         tokens = self.delay_pattern.shift_tokens_right(
             tokens, self.config.model.pad_token_id, self.config.model.pad_token_id
-        ).to(self.device)
+        )
 
         # create the inputs and labels tensors
         inputs_ids = tokens[..., :-1]
         labels = tokens[..., 1:]
 
-        logits = self.model(inputs_ids)
+        logits = self.model(inputs_ids, prompts, prompts_masks)
 
         # ignore the pad token (when pytorch see -100 in the labels it will ignore it)
         labels = labels.masked_fill(labels == self.config.model.pad_token_id, -100)
@@ -123,7 +121,9 @@ class WaveAILightning(L.LightningModule):
         if not self.config.train.test_model:
             return
 
-        tokens = self.generator.sampling()
+        _, prompts, prompts_masks, _ = batch
+
+        tokens = self.generator.sampling(prompts, prompts_masks)
         y = self.audio_codec.decode(tokens)
 
         y = AudioSignal(y.cpu().numpy(), sample_rate=self.audio_codec.model.sample_rate)

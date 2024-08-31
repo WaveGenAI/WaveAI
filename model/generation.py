@@ -24,6 +24,8 @@ class Generation:
 
     def sampling(
         self,
+        memory: torch.Tensor,
+        memory_key_padding_mask: torch.Tensor,
         duration=10,
         temperature: float = 1,
         top_k: int = 150,
@@ -40,7 +42,7 @@ class Generation:
 
         for i in range(step):
             tokens = self.pattern.apply_delay_pattern_mask(tokens, padding_mask)
-            logits = self.model(tokens)
+            logits = self.model(tokens, memory, memory_key_padding_mask)
 
             topk, indices = logits[:, :, -1, :].topk(top_k, dim=-1)
             topk = F.softmax((topk / temperature), dim=-1)

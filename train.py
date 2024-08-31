@@ -21,14 +21,9 @@ args = args.parse_args()
 torch.set_float32_matmul_precision("medium")
 config = Config()
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 lr_monitor = LearningRateMonitor(logging_interval="step")
 tokenizer = AutoTokenizer.from_pretrained(config.model.tokenizer)
-text_enc = (
-    text_encoder.T5EncoderBaseModel(max_length=config.data.max_prompt_length)
-    .eval()
-    .to(device)
-)
+text_enc = text_encoder.T5EncoderBaseModel().eval()
 model = WaveAILightning()
 
 for p in model.parameters():
@@ -85,14 +80,12 @@ def collate_fn(rows):
     ).input_ids
 
     # encode the prompt
-    prompts_embeds = text_enc(prompt)
+    prompts_embeds, prompts_masks = text_enc(prompt)
 
-    return codes, prompts_embeds, lyrics_ids
+    return codes, prompts_embeds, prompts_masks, lyrics_ids
 
 
 if __name__ == "__main__":
-    mp.set_start_method("spawn")
-
     # Load the dataset
     train_ds, test_ds = load_dataset(config.data.dataset_id, split=["train", "test"])
     train_ds = train_ds.with_format("torch")
@@ -126,8 +119,6 @@ if __name__ == "__main__":
         log_every_n_steps=1,
         default_root_dir=args.save_path,
         precision="16-mixed",
-        devices="auto",
-        strategy="auto",
         profiler="simple",
     )
 
