@@ -2,10 +2,8 @@ import argparse
 
 import lightning as L
 import torch
-import torch.multiprocessing as mp
 from datasets import load_dataset
 from lightning.pytorch.callbacks import LearningRateMonitor
-from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import WandbLogger
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
@@ -16,7 +14,9 @@ from model.lightning_model import WaveAILightning
 
 args = argparse.ArgumentParser()
 args.add_argument("--save_path", type=str, default="checkpoints", required=False)
+args.add_argument("--checkpoint_path", type=str, default=None, required=False)
 args = args.parse_args()
+
 
 torch.set_float32_matmul_precision("medium")
 config = Config()
@@ -126,4 +126,5 @@ if __name__ == "__main__":
         model=model,
         train_dataloaders=train_dataloader,
         val_dataloaders=valid_dataloader,
+        ckpt_path=args.checkpoint_path,
     )

@@ -42,6 +42,7 @@ class Generation:
 
         for i in range(step):
             tokens = self.pattern.apply_delay_pattern_mask(tokens, padding_mask)
+
             logits = self.model(tokens, memory, memory_key_padding_mask)
 
             topk, indices = logits[:, :, -1, :].topk(top_k, dim=-1)

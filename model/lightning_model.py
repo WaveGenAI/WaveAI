@@ -124,6 +124,10 @@ class WaveAILightning(L.LightningModule):
 
         _, prompts, prompts_masks, _ = batch
 
+        # get first value from batch
+        prompts = prompts[0, ...].unsqueeze(0)
+        prompts_masks = prompts_masks[0, ...].unsqueeze(0)
+
         tokens = self.generator.sampling(prompts, prompts_masks)
         y = self.audio_codec.decode(tokens)
 

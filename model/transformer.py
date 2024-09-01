@@ -49,7 +49,7 @@ class MultiheadAttention(nn.Module):
 
         # create causal mask
         temp_mask = torch.ones(
-            B, q.size(-2), k.size(-2), dtype=torch.bool, device=q.device
+            B, h, q.size(-2), k.size(-2), dtype=torch.bool, device=q.device
         )
 
         if self.causal:
@@ -59,10 +59,9 @@ class MultiheadAttention(nn.Module):
             # be sure that padding mask is boolean
             padding_mask = padding_mask.bool()
 
-            # temp_mask is [B, QT, KT] and padding_mask is [B, KT] so expand padding mask to [B, 1, KT]
-            padding_mask = padding_mask.unsqueeze(1)
+            # temp_mask is [B, h, QT, KT] and padding_mask is [B, KT] so expand padding mask to [B, 1, 1, KT]
+            padding_mask = padding_mask.unsqueeze(1).unsqueeze(2)
 
-            # apply padding mask to temp_mask
             temp_mask = temp_mask & padding_mask
 
         # apply flash attention
