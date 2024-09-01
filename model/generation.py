@@ -50,6 +50,7 @@ class Generation:
             samples = torch.multinomial(topk.view((-1, top_k)), 1).view(
                 topk.shape[:-1] + (1,)
             )
+
             new_tokens = torch.gather(indices, dim=-1, index=samples)
 
             tokens = torch.cat([tokens, new_tokens.long()], dim=2)

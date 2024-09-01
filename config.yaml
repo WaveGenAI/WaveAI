@@ -30,5 +30,5 @@ train:
   val_num_workers: 1
 
 inference:
-  checkpoint_path: 'WAVEAI/5ts7pqls/checkpoints/epoch=6-step=4333.ckpt'
-  top_k: 150
+  checkpoint_path: 'WAVEAI/ljzaoxf1/checkpoints/epoch=1-step=3260.ckpt'
+  top_k: 50

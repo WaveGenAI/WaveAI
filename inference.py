@@ -7,20 +7,12 @@ from audiotools import AudioSignal
 from transformers import AutoTokenizer
 
 import model.text_encoder as text_encoder
+from model.audio_autoencoder import DAC as audio_autoencoder
 from model.config import Config
 from model.generation import Generation
 from model.lightning_model import WaveAILightning
 
 config = Config()
-
-if config.codec.name == "DAC":
-    from model.audio_autoencoder import DAC as audio_autoencoder
-elif config.codec.name == "Encodec":
-    from model.audio_autoencoder import Encodec as audio_autoencoder
-elif config.codec.name == "SementicCodec":
-    from model.audio_autoencoder import SementicCodec as audio_autoencoder
-else:
-    raise ValueError("Invalid codec")
 
 
 class WaveModelInference:
@@ -42,20 +34,22 @@ class WaveModelInference:
         self.model = self.model.model.to(self.device)
         self.model.eval()
 
-        self.text_encoder = text_encoder.T5EncoderBaseModel(
-            max_length=config.data.max_prompt_length
-        )
+        self.text_encoder = text_encoder.T5EncoderBaseModel()
 
-        if config.codec.name in config.__dict__.keys():
-            self.audio_codec = audio_autoencoder(
-                device=self.device, **config.__dict__[config.codec.name].__dict__
-            )
-        else:
-            self.audio_codec = audio_autoencoder(device=self.device)
+        self.audio_codec = audio_autoencoder()
 
         self._tok = AutoTokenizer.from_pretrained(config.model.tokenizer)
 
-        self.generation = Generation(self.model, device=self.device)
+        self.num_codebooks = config.model.num_codebooks
+        if config.model.stereo:
+            self.num_codebooks = self.num_codebooks * 2
+
+        self.generation = Generation(
+            self.model,
+            self.num_codebooks,
+            config.model.pad_token_id,
+            config.model.stereo,
+        )
 
     def sampling(
         self,
@@ -69,21 +63,18 @@ class WaveModelInference:
             input_ids (torch.Tensor, optional): the input ids to start the generation from. Defaults to None.
         """
 
-        prompt_embd = self.text_encoder([src_text])
-        lyric_ids = self._tok(lyrics, return_tensors="pt").input_ids
+        prompt_embd, prompts_masks = self.text_encoder([src_text])
+        # lyric_ids = self._tok(lyrics, return_tensors="pt").input_ids
 
         prompt_embd = prompt_embd.to(self.device)
-        lyric_ids = lyric_ids.to(self.device)
+        prompts_masks = prompts_masks.to(self.device)
 
-        output_ids = self.generation.sampling(
-            prompt_embd, lyric_ids, top_k=self.model.config.inference.top_k
-        )
-        output_ids = output_ids[:, :, :]
+        output_ids = self.generation.sampling(prompt_embd, prompts_masks)
 
         with torch.no_grad():
-            y = self.audio_codec.decompress(output_ids)
+            y = self.audio_codec.decode(output_ids)
 
-        y = AudioSignal(y.cpu().numpy(), sample_rate=self.audio_codec.sample_rate())
+        y = AudioSignal(y.cpu().numpy(), sample_rate=self.audio_codec.model.sample_rate)
         y.write("output.wav")
 
 
