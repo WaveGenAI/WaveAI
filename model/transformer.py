@@ -1,29 +1,46 @@
+import math
+
 import torch
 import torch.nn.functional as F
-from flash_attn import flash_attn_func
+import xformers.ops as xops
 from rotary_embedding_torch import RotaryEmbedding
 from torch import nn
 
 
 class MultiheadAttention(nn.Module):
     def __init__(
-        self, embed_dim: int, num_heads: int, causal: bool, cross_attention: bool
+        self,
+        embed_dim: int,
+        num_heads: int,
+        causal: bool,
+        cross_attention: bool,
+        rotary_emb: bool,
     ):
         super().__init__()
+
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.causal = causal
         self.cross_attention = cross_attention
+        self.decoder = True
 
-        self.in_proj_weight = nn.Parameter(torch.rand((embed_dim * 3, embed_dim)))
+        self.in_proj_weight = nn.Parameter(torch.empty((embed_dim * 3, embed_dim)))
+        nn.init.kaiming_uniform_(self.in_proj_weight, a=math.sqrt(5))
+
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=False)
 
-        rotary_dim = (
-            embed_dim // num_heads
-        ) // 2  # rotary embedding dim = dim of each head / 2
-        self.rotary_emb = RotaryEmbedding(dim=rotary_dim)
+        self.key_cache = None
+        self.value_cache = None
 
-    def forward(self, query, key, value, padding_mask=None):
+        if rotary_emb:
+            rotary_dim = (
+                embed_dim // num_heads
+            ) // 2  # rotary embedding dim = dim of each head / 2
+            self.rotary_emb = RotaryEmbedding(dim=rotary_dim)
+        else:
+            self.rotary_emb = None
+
+    def forward(self, query, key, value, key_padding_mask=None):
         if not self.cross_attention:
             key = query
             value = query
@@ -34,89 +51,133 @@ class MultiheadAttention(nn.Module):
 
         q, k, v = [
             x.reshape(
-                x.shape[0], self.num_heads, x.shape[1], x.shape[2] // self.num_heads
+                x.shape[0], x.shape[1], self.num_heads, x.shape[2] // self.num_heads
             )
             for x in [q, k, v]
         ]
 
-        B, h, T, d = q.shape
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
 
-        # apply rotary embedding to queries and keys (if not cross-attention)
-        q = self.rotary_emb.rotate_queries_or_keys(q)
+        B, _, T, _ = q.shape
 
-        if not self.cross_attention:
-            k = self.rotary_emb.rotate_queries_or_keys(k)
+        if self.rotary_emb is not None:
+            # apply rotary embedding to queries and keys (if not cross-attention)
+            q = self.rotary_emb.rotate_queries_or_keys(q)
 
-        # create causal mask
-        temp_mask = torch.ones(
-            B, h, q.size(-2), k.size(-2), dtype=torch.bool, device=q.device
-        )
+            if not self.cross_attention:
+                k = self.rotary_emb.rotate_queries_or_keys(k)
 
-        if self.causal:
-            temp_mask = temp_mask.tril(diagonal=0)
-
-        if padding_mask is not None:
-            # be sure that padding mask is boolean
-            padding_mask = padding_mask.bool()
-
-            # temp_mask is [B, h, QT, KT] and padding_mask is [B, KT] so expand padding mask to [B, 1, 1, KT]
-            padding_mask = padding_mask.unsqueeze(1).unsqueeze(2)
-
-            temp_mask = temp_mask & padding_mask
-
-        # apply flash attention
-        with torch.backends.cuda.sdp_kernel(
-            enable_flash=True, enable_math=True, enable_mem_efficient=True
-        ):
-            x = F.scaled_dot_product_attention(q, k, v, attn_mask=temp_mask)
-
-        x = x.reshape(B, T, self.embed_dim)
+        x = flash_attention(q, k, v, causal=self.causal, padding_mask=key_padding_mask)
+        x = x.view(B, T, self.embed_dim)
         x = self.out_proj(x)
         return x, None
 
 
+def get_causal_mask(size: int):
+    queries_pos = torch.arange(size).view(-1, 1)
+    keys_pos = torch.arange(size).view(1, -1)
+    return torch.where(
+        (queries_pos - keys_pos) >= 0, torch.zeros([]), torch.full([], float("-inf"))
+    )
+
+
+def flash_attention(q, k, v, causal=True, padding_mask=None):
+    B, h, T, d = q.shape
+
+    # raise error if causal is true and padding_mask is not None
+    assert not (
+        causal and padding_mask is not None
+    ), "Causal and padding_mask not supported together"
+
+    if padding_mask is not None:
+        # torch.Size([1, 1, 1, T])
+        padding_mask = padding_mask.unsqueeze(1).unsqueeze(2)
+        padding_mask = padding_mask.to(torch.bool)
+
+    # apply flash attention
+    with torch.backends.cuda.sdp_kernel(
+        enable_flash=True, enable_math=True, enable_mem_efficient=True
+    ):
+        x = F.scaled_dot_product_attention(q, k, v, is_causal=causal)
+
+    x = x.transpose(1, 2).reshape(B, T, d * h)
+    return x
+
+
+def inefficient_attention(q, k, v, causal=True):
+    B, h, T, d = q.shape
+    embed_dim = d * h
+
+    attention = q.matmul(k.transpose(2, 3)) / math.sqrt(embed_dim // h)
+
+    if causal:
+        attn_mask = (
+            get_causal_mask(q.shape[2])
+            .unsqueeze(0)
+            .unsqueeze(0)
+            .to(q.device)
+            .to(q.dtype)
+        )
+        attention += attn_mask
+    activation = torch.softmax(attention, dim=-1)
+    x = (
+        v.unsqueeze(2).repeat([1, 1, T, 1, 1])
+        * activation.unsqueeze(-1).repeat([1, 1, 1, 1, 64])
+    ).sum(dim=3)
+    x = x.transpose(1, 2).reshape(B, T, d * h)
+    return x
+
+
 def create_sin_embedding(positions: torch.Tensor, dim: int) -> torch.Tensor:
+    # We aim for BTC format
     assert dim % 2 == 0
     half_dim = dim // 2
+    positions = positions
     adim = torch.arange(half_dim, device=positions.device, dtype=positions.dtype).view(
         1, 1, -1
     )
-    max_period_tensor = torch.full([], 10000, device=positions.device)
+    max_period_tensor = torch.full(
+        [], 10_000, device=positions.device
+    )  # avoid sync point
     phase = positions / (max_period_tensor ** (adim / (half_dim - 1)))
     return torch.cat([torch.cos(phase), torch.sin(phase)], dim=-1)
 
 
 class TransformerLayer(nn.Module):
-    def __init__(self, dim: int, ff_dim: int, heads: int, dropout: float = 0.1):
+    def __init__(self, dim=1024, num_heads=16, ff_dim=4096, rotary_emb=False):
         super().__init__()
         self.norm1 = nn.LayerNorm(dim)
         self.self_attn = MultiheadAttention(
-            embed_dim=dim, causal=True, cross_attention=False, num_heads=heads
+            embed_dim=dim,
+            causal=True,  # big difference!
+            cross_attention=False,
+            num_heads=num_heads,
+            rotary_emb=rotary_emb,
         )
-        self.dropout1 = nn.Dropout(dropout)
-
         self.norm_cross = nn.LayerNorm(dim)
         self.cross_attention = MultiheadAttention(
-            embed_dim=dim, causal=False, cross_attention=True, num_heads=heads
+            embed_dim=dim,
+            causal=False,
+            cross_attention=True,
+            num_heads=num_heads,
+            rotary_emb=rotary_emb,
         )
-        self.dropout_cross = nn.Dropout(dropout)
 
         self.norm2 = nn.LayerNorm(dim)
         self.linear1 = nn.Linear(dim, ff_dim, bias=False)
         self.linear2 = nn.Linear(ff_dim, dim, bias=False)
-        self.dropout2 = nn.Dropout(dropout)
 
-    def forward(self, x, memory, memory_key_padding_mask=None):
+    def forward(self, x, memory, memory_key_padding_mask):
         x_ = self.norm1(x)
-        x = x + self.dropout1(self.self_attn(x_, x_, x_)[0])
+        x = x + self.self_attn(x_, x_, x_)[0]
 
         x_ = self.norm_cross(x)
-        x = x + self.dropout_cross(
-            self.cross_attention(x_, memory, memory, memory_key_padding_mask)[0]
-        )
+        x = x + self.cross_attention(x_, memory, memory, memory_key_padding_mask)[0]
 
         x_ = self.norm2(x)
-        x = x + self.dropout2(self.linear2(F.gelu(self.linear1(x_))))
+        x = x + self.linear2(F.gelu(self.linear1(x_)))
         return x
 
 
@@ -127,18 +188,26 @@ class Transformer(nn.Module):
         depth: int = 24,
         ff_dim: int = 4096,
         heads: int = 16,
-        dropout: float = 0.1,
+        rotary_emb: bool = False,
     ):
         super().__init__()
-        self.layers = nn.ModuleList(
-            [TransformerLayer(dim, ff_dim, heads, dropout) for _ in range(depth)]
-        )
 
-    def forward(self, x, memory, memory_key_padding_mask=None):
+        self.layers = nn.ModuleList(
+            [TransformerLayer(dim, heads, ff_dim, rotary_emb) for _ in range(depth)]
+        )
+        self._rotary_emb = rotary_emb
+
+    def pos_embed(self, x):
+        B, T, dim = x.shape
+        positions = (
+            torch.arange(T, device=x.device).view(1, -1, 1).to(x.dtype).to(x.device)
+        )
+        x = x + create_sin_embedding(positions, dim)
+        return x
+
+    def forward(self, x, memory, memory_key_padding_mask):
+        if not self._rotary_emb:
+            x = self.pos_embed(x)
         for layer in self.layers:
-            x = layer(
-                x,
-                memory=memory,
-                memory_key_padding_mask=memory_key_padding_mask,
-            )
+            x = layer(x, memory, memory_key_padding_mask)
         return x

@@ -1,17 +1,17 @@
 model:
-  num_codebooks: 9
-  codebook_size: 1024
+  num_codebooks: 4
+  codebook_size: 2048
   hidden_size: 1024
-  pad_token_id: 1024
   stereo: false
-  decoder_depth: 12
+  decoder_depth: 24
   decoder_heads: 16
   rotary_emb: false
 
   memory_dim: 1024
-  max_seq_length: 3000
+  max_seq_length: 200
   
   vocab_size: 32128
+  pad_token_id: 2048
   tokenizer: 'google/flan-t5-base'
 
 data:
@@ -34,4 +34,4 @@ train:
 
 inference:
   checkpoint_path: 
-  top_k: 150
+  top_k: 50

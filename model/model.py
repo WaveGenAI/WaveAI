@@ -4,6 +4,7 @@ Class for the main model (music generation)
 
 import torch
 import torch.nn as nn
+from huggingface_hub import hf_hub_download
 
 from .transformer import Transformer
 
@@ -19,6 +20,7 @@ class WaveAI(nn.Module):
         depth: int,
         num_heads: int,
         memory_dim: int,
+        rotary_emb: bool = False,
     ):
         super().__init__()
 
@@ -26,7 +28,9 @@ class WaveAI(nn.Module):
             [nn.Embedding(codebook_size + 1, dim) for _ in range(codebook_count)]
         )
 
-        self.transformer = Transformer(dim=dim, depth=depth, heads=num_heads)
+        self.transformer = Transformer(
+            dim=dim, depth=depth, heads=num_heads, rotary_emb=rotary_emb
+        )
 
         self.out_norm = nn.LayerNorm(dim)
         self.linears = nn.ModuleList(
@@ -34,11 +38,6 @@ class WaveAI(nn.Module):
         )
 
         self.num_codebooks = codebook_count
-
-        if memory_dim != dim:
-            self.memory_proj = nn.Linear(memory_dim, dim)
-        else:
-            self.memory_proj = nn.Identity()
 
     def forward(
         self,
@@ -60,8 +59,16 @@ class WaveAI(nn.Module):
 
         x = sum([emb(x[:, i, :]) for i, emb in enumerate(self.emb)])
 
-        memory = self.memory_proj(memory).to(x.device)
+        memory = memory.to(x.device)
         x = self.transformer(x, memory, memory_key_padding_mask)
         x = self.out_norm(x)
         x = torch.stack([linear(x) for linear in self.linears], dim=1)
         return x
+
+    def load_pretrained(self, device, model="facebook/musicgen-small"):
+        path = hf_hub_download(repo_id=model, filename="state_dict.bin", cache_dir=None)
+        _values = torch.load(path, map_location=device)
+        state_dict = {
+            k: v for k, v in _values["best_state"].items() if k in self.state_dict()
+        }
+        self.load_state_dict(state_dict)

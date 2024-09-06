@@ -2,12 +2,15 @@
 Code for inference with the model.
 """
 
+import random
+
+import numpy as np
 import torch
 from audiotools import AudioSignal
 from transformers import AutoTokenizer
 
 import model.text_encoder as text_encoder
-from model.audio_autoencoder import DAC as audio_autoencoder
+from model.audio_autoencoder import Encodec as audio_autoencoder
 from model.config import Config
 from model.generation import Generation
 from model.lightning_model import WaveAILightning
@@ -37,6 +40,7 @@ class WaveModelInference:
         self.text_encoder = text_encoder.T5EncoderBaseModel()
 
         self.audio_codec = audio_autoencoder()
+        self.audio_codec.load_pretrained(torch.device("cpu"))
 
         self._tok = AutoTokenizer.from_pretrained(config.model.tokenizer)
 
@@ -72,13 +76,11 @@ class WaveModelInference:
         output_ids = self.generation.sampling(prompt_embd, prompts_masks)
 
         with torch.no_grad():
-            y = self.audio_codec.decode(output_ids)
+            y = self.audio_codec.decode(output_ids.cpu())
 
-        y = AudioSignal(y.cpu().numpy(), sample_rate=self.audio_codec.model.sample_rate)
+        y = AudioSignal(y.cpu().numpy(), sample_rate=self.audio_codec.sample_rate)
         y.write("output.wav")
 
-
-model = WaveModelInference()
 
 prompt = """ 
 subject: baltimore club,bass music,electronic,experimental,jersey club,juke,jungle,vaporwave,future funk,screwgaze,television,vaporwave,vhs,philadelphia, title: Touch The Ground, album: Culture Vulture, genre:
@@ -88,4 +90,11 @@ lyric = """
 I'm a little teapot
 """.strip()
 
+SEED = 10
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+
+model = WaveModelInference()
+model.model.load_pretrained(model.device)
 model.sampling(prompt, lyric)

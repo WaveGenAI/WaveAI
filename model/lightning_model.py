@@ -61,7 +61,9 @@ class WaveAILightning(L.LightningModule):
             self.config.model.decoder_depth,
             self.config.model.decoder_heads,
             self.config.model.memory_dim,
+            self.config.model.rotary_emb,
         )
+        # self.model.load_pretrained(self.device) -> also I have to disable weight initialization
         self.save_hyperparameters()
 
         # put in list to avoid training in the pytorch-lightning (a bit hacky)
@@ -75,7 +77,7 @@ class WaveAILightning(L.LightningModule):
             self.config.model.stereo,
         )
         self.audio_codec = audio_autoencoder()
-        self.audio_codec.model.to("cpu")
+        # self.audio_codec.load_pretrained(self.device)
 
     def step(self, batch, batch_idx) -> torch.Tensor:
         audio, prompts, prompts_masks, _ = batch
@@ -94,7 +96,7 @@ class WaveAILightning(L.LightningModule):
         # shift the tokens to the right (like that the model will predict the next token and will not see the future)
         tokens = self.delay_pattern.shift_tokens_right(
             tokens, self.config.model.pad_token_id, self.config.model.pad_token_id
-        )
+        )[:, : self.num_codebooks, :]
 
         # create the inputs and labels tensors
         inputs_ids = tokens[..., :-1]
@@ -129,9 +131,11 @@ class WaveAILightning(L.LightningModule):
         prompts_masks = prompts_masks[0, ...].unsqueeze(0)
 
         tokens = self.generator.sampling(prompts, prompts_masks)
-        y = self.audio_codec.decode(tokens)
 
-        y = AudioSignal(y.cpu().numpy(), sample_rate=self.audio_codec.model.sample_rate)
+        with torch.no_grad():
+            y = self.audio_codec.decode(tokens.cpu()).to(torch.float32)
+
+        y = AudioSignal(y.cpu().numpy(), sample_rate=self.audio_codec.sample_rate)
 
         with tempfile.NamedTemporaryFile(suffix=".wav") as f:
             y.write(f.name)

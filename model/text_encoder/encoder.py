@@ -12,7 +12,7 @@ class T5EncoderBaseModel(nn.Module):
     T5 Encoder Model, which is used to encode the input text into a latent space.
     """
 
-    def __init__(self, name: str = "google-t5/t5-small"):
+    def __init__(self, name: str = "google-t5/t5-large"):
         """Encoder Model for Text Data
 
         Args:

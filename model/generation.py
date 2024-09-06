@@ -31,35 +31,41 @@ class Generation:
         top_k: int = 150,
     ) -> torch.Tensor:
         # tokens: [batch_size, channel * num_codebooks, seq_length]
-        tokens = (
-            torch.ones((1, self.num_codebooks, 1), dtype=torch.long) * self.pad_token
-        ).to("cuda")
+        tokens = (torch.ones(1, self.num_codebooks, 1).long() * self.pad_token).to(
+            "cuda"
+        )
 
-        step = duration * 86
+        step = duration * 86 + (self.num_codebooks - 1)
         tokens, padding_mask = self.pattern.build_delay_pattern_mask(
             tokens, self.pad_token, step
         )
 
-        for i in range(step):
-            tokens = self.pattern.apply_delay_pattern_mask(tokens, padding_mask)
+        with torch.no_grad():
+            with torch.cuda.amp.autocast():
+                for i in range(step):
+                    tokens = self.pattern.apply_delay_pattern_mask(tokens, padding_mask)
+                    logits = self.model.forward(tokens, memory, memory_key_padding_mask)
+                    topk_tokens, indices = logits[:, :, -1, :].topk(top_k, dim=-1)
+                    topk_tokens = F.softmax((topk_tokens / temperature), dim=-1)
+                    samples = torch.multinomial(topk_tokens.view((-1, top_k)), 1).view(
+                        topk_tokens.shape[:-1] + (1,)
+                    )
+                    new_tokens = torch.gather(indices, dim=-1, index=samples)
+                    tokens = torch.cat([tokens, new_tokens], dim=2)
 
-            logits = self.model(tokens, memory, memory_key_padding_mask)
+                    print(f"Step {i + 1} / {step}", end="\r")
 
-            topk, indices = logits[:, :, -1, :].topk(top_k, dim=-1)
-            topk = F.softmax((topk / temperature), dim=-1)
-            samples = torch.multinomial(topk.view((-1, top_k)), 1).view(
-                topk.shape[:-1] + (1,)
-            )
+        tokens = torch.stack(
+            [
+                tokens[:, 0, 0:-3],
+                tokens[:, 1, 1:-2],
+                tokens[:, 2, 2:-1],
+                tokens[:, 3, 3:],
+            ],
+            dim=1,
+        )[:, :, 1:]
 
-            new_tokens = torch.gather(indices, dim=-1, index=samples)
-
-            tokens = torch.cat([tokens, new_tokens.long()], dim=2)
-
-            print(f"Step {i + 1} / {step}", end="\r")
-
-        tokens = self.pattern.reverse_delay_pattern_mask(tokens)[..., 1:]
-
-        if self.stereo:
+        if self.stereo:  # TODO: check this
             # convert 1 x (num_codebooks x channels) x seq_length to 2 x num_codebooks x seq_length
             tokens = tokens.view(1, 2, self.num_codebooks // 2, -1)
 

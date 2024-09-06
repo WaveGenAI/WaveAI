@@ -22,6 +22,8 @@ class DAC:
         self.model = dac.DAC.load(model_path)
         self.model.eval()
 
+        self.sample_rate = self.model.sample_rate
+
     @torch.no_grad()
     def encode(self, audio: str | torch.Tensor) -> torch.Tensor:
         """Encode the audio signal.
