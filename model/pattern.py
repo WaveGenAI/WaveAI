@@ -96,6 +96,46 @@ class DelayPattern:
 
         return shifted_inputs_ids
 
+    @staticmethod
+    def stereo_convert(codec: torch.Tensor) -> torch.Tensor:
+        """Convert the codec tensor to stereo pattern
+
+        Args:
+            codec (torch.Tensor): the codec tensor
+
+        Returns:
+            torch.Tensor: the stereo codec tensor
+        """
+
+        out = torch.zeros_like(codec, dtype=codec.dtype)
+        num_codebooks = codec.shape[1] // 2
+
+        for i in range(num_codebooks):
+            out[:, i * 2, :] = codec[:, i, :]
+            out[:, i * 2 + 1, :] = codec[:, i + num_codebooks, :]
+
+        return out
+
+    @staticmethod
+    def stereo_unconvert(codec: torch.Tensor) -> torch.Tensor:
+        """Convert the codec tensor to stereo pattern
+
+        Args:
+            codec (torch.Tensor): the codec tensor
+
+        Returns:
+            torch.Tensor: the stereo codec tensor
+        """
+
+        out = torch.zeros_like(codec, dtype=codec.dtype)
+        num_codebooks = codec.shape[1] // 2
+
+        for i in range(num_codebooks):
+            out[:, i, :] = codec[:, i * 2, :]
+            out[:, i + num_codebooks, :] = codec[:, i * 2 + 1, :]
+
+        return out
+
     def reverse_delay_pattern_mask(self, input_ids):
         """Reverse the delay pattern mask to the input_ids. This is used to predict the next token in the sequence"""
         b, k, seq_len = input_ids.shape

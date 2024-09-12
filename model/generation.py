@@ -55,18 +55,12 @@ class Generation:
 
                     print(f"Step {i + 1} / {step}", end="\r")
 
-        tokens = torch.stack(
-            [
-                tokens[:, 0, 0:-3],
-                tokens[:, 1, 1:-2],
-                tokens[:, 2, 2:-1],
-                tokens[:, 3, 3:],
-            ],
-            dim=1,
-        )[:, :, 1:]
+        tokens = self.pattern.reverse_delay_pattern_mask(tokens)[..., 1:]
 
         if self.stereo:  # TODO: check this
-            # convert 1 x (num_codebooks x channels) x seq_length to 2 x num_codebooks x seq_length
+            tokens = self.pattern.stereo_unconvert(tokens)
+
+            # convert 1 x (num_codebooks x channels) x seq_length to 1 x channels x num_codebooks x seq_length
             tokens = tokens.view(1, 2, self.num_codebooks // 2, -1)
 
             # remove the batch dimension

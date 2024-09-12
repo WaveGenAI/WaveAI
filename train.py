@@ -35,7 +35,7 @@ def stereo_convert(codec: torch.Tensor) -> torch.Tensor:
     """Convert the codec tensor to stereo if needed
 
     Args:
-        codec (torch.Tensor): the codec tensor
+        codec (torch.Tensor): the codec tensor of shape (seq_length, num_codebooks, num_channels)
 
     Returns:
         torch.Tensor: the stereo codec tensor if needed

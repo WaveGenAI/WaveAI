@@ -76,7 +76,7 @@ class WaveModelInference:
         output_ids = self.generation.sampling(prompt_embd, prompts_masks)
 
         with torch.no_grad():
-            y = self.audio_codec.decode(output_ids.cpu())
+            y = self.audio_codec.decode(output_ids.cpu()).to(torch.float32)
 
         y = AudioSignal(y.cpu().numpy(), sample_rate=self.audio_codec.sample_rate)
         y.write("output.wav")
@@ -96,5 +96,5 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 model = WaveModelInference()
-model.model.load_pretrained(model.device)
+# model.model.load_pretrained(model.device)
 model.sampling(prompt, lyric)

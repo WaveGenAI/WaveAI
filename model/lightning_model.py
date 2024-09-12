@@ -88,6 +88,9 @@ class WaveAILightning(L.LightningModule):
         # just for logging (to see the number of tokens)
         self.log("nbm_token", audio.numel())
 
+        if self.config.model.stereo:
+            audio = self.delay_pattern.stereo_convert(audio)
+
         # get the delay pattern, in this way each token is delayed by the same amount of time
         tokens, _ = self.delay_pattern.build_delay_pattern_mask(
             audio, self.config.model.pad_token_id, self.config.model.max_seq_length

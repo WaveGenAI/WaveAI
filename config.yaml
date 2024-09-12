@@ -3,10 +3,10 @@ model:
   codebook_size: 1024
   hidden_size: 1024
   pad_token_id: 1024
-  stereo: false
+  stereo: true
   decoder_depth: 12
   decoder_heads: 16
-  rotary_emb: false
+  rotary_emb: true
 
   memory_dim: 1024
   max_seq_length: 3000
@@ -21,7 +21,7 @@ data:
   max_lyrics_length: 512
 
 train:
-  max_epochs: 10
+  max_epochs: 20
   accumulate_grad_batches: 32
   batch_size: 1
   gradient_clip_val: 1 
