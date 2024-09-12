@@ -10,7 +10,7 @@ from audiotools import AudioSignal
 from transformers import AutoTokenizer
 
 import model.text_encoder as text_encoder
-from model.audio_autoencoder import Encodec as audio_autoencoder
+from model.audio_autoencoder import DAC as audio_autoencoder
 from model.config import Config
 from model.generation import Generation
 from model.lightning_model import WaveAILightning
