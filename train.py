@@ -17,14 +17,17 @@ args.add_argument("--save_path", type=str, default="checkpoints", required=False
 args.add_argument("--checkpoint_path", type=str, default=None, required=False)
 args = args.parse_args()
 
-
+# opti
 torch.set_float32_matmul_precision("medium")
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+
 config = Config()
 
 lr_monitor = LearningRateMonitor(logging_interval="step")
 tokenizer = AutoTokenizer.from_pretrained(config.model.tokenizer)
 text_enc = text_encoder.T5EncoderBaseModel().eval()
-model = WaveAILightning()
+model = WaveAILightning(config)
 
 for p in model.parameters():
     if p.dim() > 1:
@@ -54,7 +57,7 @@ def stereo_convert(codec: torch.Tensor) -> torch.Tensor:
 
 # Define the collate function for processing batches
 @torch.no_grad()
-def collate_fn(rows):
+def collate_fn(rows) -> tuple:
     codec = [stereo_convert(torch.permute(row["codec"], (2, 1, 0))) for row in rows]
     prompt = [row["prompt"] for row in rows]
     lyrics = [row["lyrics"] for row in rows]
@@ -82,7 +85,7 @@ def collate_fn(rows):
     # encode the prompt
     prompts_embeds, prompts_masks = text_enc(prompt)
 
-    return codes, prompts_embeds, prompts_masks, lyrics_ids
+    return codes, prompts_embeds, prompts_masks, lyrics_ids, prompt, lyrics
 
 
 if __name__ == "__main__":
@@ -108,7 +111,8 @@ if __name__ == "__main__":
         collate_fn=collate_fn,
     )
 
-    wandb_logger = WandbLogger(project="WAVEAI")
+    wandb_logger = WandbLogger(project="WAVEAI", log_model=True)
+    wandb_logger.watch(model)
 
     trainer = L.Trainer(
         max_epochs=config.train.max_epochs,

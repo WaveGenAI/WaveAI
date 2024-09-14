@@ -14,6 +14,8 @@ model:
   vocab_size: 32128
   tokenizer: 'google/flan-t5-base'
 
+  compile: false
+
 data:
   dataset_id: 'WaveGenAI/audio'
   duration: 30
@@ -29,8 +31,9 @@ train:
   lr_max: 0.00095
   lr_min: 0.000001  
   test_model: true
-  train_num_workers: 2
-  val_num_workers: 1
+  train_num_workers: 4
+  val_num_workers: 4
+  log_every_n_steps: 10_000 
 
 inference:
   checkpoint_path: 

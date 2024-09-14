@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import xformers.ops as xops
 from rotary_embedding_torch import RotaryEmbedding
 from torch import nn
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 
 class MultiheadAttention(nn.Module):
@@ -97,8 +98,8 @@ def flash_attention(q, k, v, causal=True, padding_mask=None):
         padding_mask = padding_mask.to(torch.bool)
 
     # apply flash attention
-    with torch.backends.cuda.sdp_kernel(
-        enable_flash=True, enable_math=True, enable_mem_efficient=True
+    with sdpa_kernel(
+        [SDPBackend.FLASH_ATTENTION, SDPBackend.MATH, SDPBackend.EFFICIENT_ATTENTION]
     ):
         x = F.scaled_dot_product_attention(q, k, v, is_causal=causal)
 

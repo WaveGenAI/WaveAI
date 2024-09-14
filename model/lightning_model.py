@@ -4,6 +4,7 @@ import bitsandbytes as bnb
 import lightning as L
 import torch
 from audiotools import AudioSignal
+from lightning.pytorch.utilities import grad_norm
 from torch.nn import CrossEntropyLoss
 from torch.optim import lr_scheduler
 from torchmetrics import Metric
@@ -15,8 +16,6 @@ from .config import Config
 from .generation import Generation
 from .model import WaveAI
 from .pattern import DelayPattern
-
-config = Config()
 
 
 class LossTensor(Metric):
@@ -38,11 +37,12 @@ class LossTensor(Metric):
 
 
 class WaveAILightning(L.LightningModule):
-    def __init__(self) -> None:
+    def __init__(self, config: Config) -> None:
         """Lightning module for WaveAI.
 
         Args:
             use_prompt (bool, optional): is model trained on prompt. Defaults to False.
+            config (Config): the configuration of the model
         """
 
         super().__init__()
@@ -63,6 +63,13 @@ class WaveAILightning(L.LightningModule):
             self.config.model.memory_dim,
             self.config.model.rotary_emb,
         )
+
+        if self.config.model.compile:
+            self.model = torch.compile(
+                self.model,
+                options={"shape_padding": True},
+            )
+
         # self.model.load_pretrained(self.device) -> also I have to disable weight initialization
         self.save_hyperparameters()
 
@@ -79,8 +86,11 @@ class WaveAILightning(L.LightningModule):
         self.audio_codec = audio_autoencoder()
         # self.audio_codec.load_pretrained(self.device)
 
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.sample_table = wandb.Table(columns=["prompt", "audio"])
+
     def step(self, batch, batch_idx) -> torch.Tensor:
-        audio, prompts, prompts_masks, _ = batch
+        audio, prompts, prompts_masks, *_ = batch
 
         # cut the audio to the max length
         audio = audio[:, :, : self.config.model.max_seq_length]
@@ -123,11 +133,11 @@ class WaveAILightning(L.LightningModule):
         return loss
 
     @torch.no_grad()
-    def test_model(self, batch):
+    def test_model(self, batch) -> AudioSignal:
         if not self.config.train.test_model:
             return
 
-        _, prompts, prompts_masks, _ = batch
+        _, prompts, prompts_masks, *_ = batch
 
         # get first value from batch
         prompts = prompts[0, ...].unsqueeze(0)
@@ -139,18 +149,19 @@ class WaveAILightning(L.LightningModule):
             y = self.audio_codec.decode(tokens.cpu()).to(torch.float32)
 
         y = AudioSignal(y.cpu().numpy(), sample_rate=self.audio_codec.sample_rate)
-
-        with tempfile.NamedTemporaryFile(suffix=".wav") as f:
-            y.write(f.name)
-            self.logger.experiment.log(
-                {
-                    "audio": wandb.Audio(f.name, caption="audio"),
-                }
-            )
+        return y
 
     def training_step(self, batch, batch_idx):
-        if batch_idx % 10_000 == 0:
-            self.test_model(batch)
+        if batch_idx % self.config.train.log_every_n_steps == 0:
+            y = self.test_model(batch)
+
+            with tempfile.NamedTemporaryFile(suffix=".wav") as f:
+                y.write(f.name)
+                self.logger.experiment.log(
+                    {
+                        "audio": wandb.Audio(f.name, caption="audio"),
+                    }
+                )
 
         # if the batch is too small, skip it (I should do that in the pipeline)
         if batch[0].shape[-1] < (self.num_codebooks + 1):
@@ -168,8 +179,21 @@ class WaveAILightning(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        if batch_idx < 3:
-            self.test_model(batch)
+        if batch_idx == 0:
+            self.logger.experiment.log(
+                {f"eval-step-{self.current_epoch}": self.sample_table}
+            )
+            self.temp_dir.cleanup()
+            self.temp_dir = tempfile.TemporaryDirectory()
+            self.sample_table = wandb.Table(columns=["prompt", "audio"])
+
+        if batch_idx < 10:
+            y = self.test_model(batch)
+            y.write(f"{self.temp_dir.name}/test_{batch_idx}.wav")
+
+            self.sample_table.add_data(
+                batch[4][0], wandb.Audio(f"{self.temp_dir.name}/test_{batch_idx}.wav")
+            )
 
         loss = self.step(batch, batch_idx)
 
@@ -206,3 +230,7 @@ class WaveAILightning(L.LightningModule):
         )
 
         return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
+
+    def on_before_optimizer_step(self, optimizer):
+        norms = grad_norm(self.model, norm_type=2)
+        self.log_dict(norms)

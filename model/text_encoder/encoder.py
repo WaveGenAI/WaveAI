@@ -39,6 +39,7 @@ class T5EncoderBaseModel(nn.Module):
             return_tensors="pt",
             padding=True,
             truncation=True,
+            max_length=1024,
         )
 
         input_ids = encoded["input_ids"]
