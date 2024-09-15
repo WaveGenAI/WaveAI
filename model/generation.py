@@ -13,7 +13,7 @@ class Generation:
         stereo: bool = False,
     ) -> None:
         self.model = model
-        self.pattern = DelayPattern()
+        self.pattern = DelayPattern(stereo)
 
         self.stereo = stereo
         self.num_codebooks = num_codebooks
@@ -58,8 +58,6 @@ class Generation:
         tokens = self.pattern.reverse_delay_pattern_mask(tokens)[..., 1:]
 
         if self.stereo:  # TODO: check this
-            tokens = self.pattern.stereo_unconvert(tokens)
-
             # convert 1 x (num_codebooks x channels) x seq_length to 1 x channels x num_codebooks x seq_length
             tokens = tokens.view(1, 2, self.num_codebooks // 2, -1)
 

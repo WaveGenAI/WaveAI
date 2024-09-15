@@ -11,9 +11,11 @@ class DelayPattern:
     This is used to predict the next token in the sequence
     """
 
-    @staticmethod
+    def __init__(self, stereo: bool = False):
+        self._stereo = stereo
+
     def build_delay_pattern_mask(
-        input_ids: torch.LongTensor, pad_token_id: int, max_seq_length: int
+        self, input_ids: torch.LongTensor, pad_token_id: int, max_seq_length: int
     ):
         """Build a delayed pattern mask to the input_ids. Each codebook is offset by the previous codebook by
         one, giving a delayed pattern mask at the start of sequence and end of sequence. Take the example where there
@@ -33,6 +35,9 @@ class DelayPattern:
         where a-h indicate the input prompt (decoder input ids) that are offset by 1. Now, we only override the -1
         tokens in our prediction.
         """
+        if self._stereo:
+            input_ids = self._stereo_convert(input_ids)
+
         b, k, seq_len = input_ids.shape
 
         delays_ids = torch.full(
@@ -97,7 +102,7 @@ class DelayPattern:
         return shifted_inputs_ids
 
     @staticmethod
-    def stereo_convert(codec: torch.Tensor) -> torch.Tensor:
+    def _stereo_convert(codec: torch.Tensor) -> torch.Tensor:
         """Convert the codec tensor to stereo pattern
 
         Args:
@@ -117,7 +122,7 @@ class DelayPattern:
         return out
 
     @staticmethod
-    def stereo_unconvert(codec: torch.Tensor) -> torch.Tensor:
+    def _stereo_unconvert(codec: torch.Tensor) -> torch.Tensor:
         """Convert the codec tensor to stereo pattern
 
         Args:
@@ -138,6 +143,7 @@ class DelayPattern:
 
     def reverse_delay_pattern_mask(self, input_ids):
         """Reverse the delay pattern mask to the input_ids. This is used to predict the next token in the sequence"""
+
         b, k, seq_len = input_ids.shape
 
         delays_ids = torch.full((b, k, seq_len - (k - 1)), 0, dtype=torch.long)
@@ -146,5 +152,8 @@ class DelayPattern:
             delays_ids[:, k_idx, :] = input_ids[
                 :, k_idx, k_idx : seq_len - (k - 1) + k_idx
             ]
+
+        if self._stereo:
+            delays_ids = self._stereo_unconvert(delays_ids)
 
         return delays_ids

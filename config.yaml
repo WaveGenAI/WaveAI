@@ -36,5 +36,5 @@ train:
   log_every_n_steps: 10_000 
 
 inference:
-  checkpoint_path: 
+  checkpoint_path:
   top_k: 150

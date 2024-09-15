@@ -15,8 +15,6 @@ from model.config import Config
 from model.generation import Generation
 from model.lightning_model import WaveAILightning
 
-config = Config()
-
 
 class WaveModelInference:
     """
@@ -27,7 +25,8 @@ class WaveModelInference:
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         print(f"Using device: {self.device}")
 
-        self.model = WaveAILightning()
+        config = Config()
+        self.model = WaveAILightning(config)
 
         path = config.inference.checkpoint_path
         if path is not None:
@@ -40,7 +39,6 @@ class WaveModelInference:
         self.text_encoder = text_encoder.T5EncoderBaseModel()
 
         self.audio_codec = audio_autoencoder()
-        self.audio_codec.load_pretrained(torch.device("cpu"))
 
         self._tok = AutoTokenizer.from_pretrained(config.model.tokenizer)
 
@@ -83,7 +81,7 @@ class WaveModelInference:
 
 
 prompt = """ 
-subject: baltimore club,bass music,electronic,experimental,jersey club,juke,jungle,vaporwave,future funk,screwgaze,television,vaporwave,vhs,philadelphia, title: Touch The Ground, album: Culture Vulture, genre:
+kick hi-hat snare
 """.strip()
 
 lyric = """

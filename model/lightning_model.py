@@ -37,7 +37,7 @@ class LossTensor(Metric):
 
 
 class WaveAILightning(L.LightningModule):
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config = Config()):
         """Lightning module for WaveAI.
 
         Args:
@@ -48,7 +48,7 @@ class WaveAILightning(L.LightningModule):
         super().__init__()
 
         self.config = config
-        self.delay_pattern = DelayPattern()
+        self.delay_pattern = DelayPattern(self.config.model.stereo)
 
         self.num_codebooks = self.config.model.num_codebooks
         if self.config.model.stereo:
@@ -97,9 +97,6 @@ class WaveAILightning(L.LightningModule):
 
         # just for logging (to see the number of tokens)
         self.log("nbm_token", audio.numel())
-
-        if self.config.model.stereo:
-            audio = self.delay_pattern.stereo_convert(audio)
 
         # get the delay pattern, in this way each token is delayed by the same amount of time
         tokens, _ = self.delay_pattern.build_delay_pattern_mask(
@@ -159,7 +156,7 @@ class WaveAILightning(L.LightningModule):
                 y.write(f.name)
                 self.logger.experiment.log(
                     {
-                        "audio": wandb.Audio(f.name, caption="audio"),
+                        "audio": wandb.Audio(f.name, caption=batch[4][0]),
                     }
                 )
 
