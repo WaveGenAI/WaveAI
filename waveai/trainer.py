@@ -6,13 +6,13 @@ from lightning.pytorch.utilities import grad_norm
 from torch.nn import CrossEntropyLoss
 from torch.optim import lr_scheduler
 
-from .audio_autoencoder import DAC as audio_autoencoder
 from .audio_processor import AudioProcessor
 from .generation import Generation
 from .model import WaveAI
 from .utils.config_parser import ConfigParser
 from .utils.logs import LossTensor
 from .utils.pattern import DelayPattern
+from .utils.utils import gaussian_noise_gen
 
 
 class Trainer(L.LightningModule):
@@ -104,6 +104,15 @@ class Trainer(L.LightningModule):
         # create the inputs and labels tensors
         inputs_ids = input_ids[..., :-1]
         labels = input_ids[..., 1:]
+
+        # add random noise to the inputs
+        inputs_ids = gaussian_noise_gen(
+            inputs_ids,
+            self.config.train.noise_mean,
+            self.config.train.noise_std,
+            max_val=self.config.model.pad_token_id,
+            ignore_token=[self.config.model.pad_token_id, -100],
+        )
 
         logits = self.model(inputs_ids, prompts, prompts_masks)
 
