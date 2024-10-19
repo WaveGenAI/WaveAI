@@ -1,0 +1,36 @@
+model:
+  num_codebooks: 9
+  codebook_size: 1024
+  hidden_size: 1024
+  pad_token_id: 1024
+  stereo: true
+  decoder_depth: 12
+  decoder_heads: 16
+  rotary_emb: true
+
+  memory_dim: 1024
+  max_seq_length: 3000
+  
+  vocab_size: 32128
+  tokenizer: 'google/flan-t5-base'
+
+  compile: false
+
+data:
+  dataset_id: 'WaveGenAI/audio'
+  duration: 30
+  max_prompt_length: 512
+  max_lyrics_length: 512
+
+train:
+  max_epochs: 20
+  accumulate_grad_batches: 32
+  batch_size: 1
+  gradient_clip_val: 1 
+  warmup_steps: 200
+  lr_max: 0.00095
+  lr_min: 0.000001  
+  test_model: true
+  train_num_workers: 4
+  val_num_workers: 4
+  log_every_n_steps: 10_000 

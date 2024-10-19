@@ -1,16 +1,18 @@
+from typing import Any
+
 import yaml
 
 
-class Config:
+class ConfigParser:
     """
     Configuration class for the model
     """
 
-    def __init__(self, settings=None):
+    def __init__(self, settings: dict = None, config_path: str = None):
         if settings is not None:
             self.__dict__.update(self._convert_dict_to_object(settings))
         else:
-            self.setup()
+            self.setup(config_path)
 
     def __str__(self):
         return str(self.__dict__)
@@ -18,7 +20,7 @@ class Config:
     def __repr__(self):
         return str(self.__dict__)
 
-    def setup(self, config_path: str = "config.yaml"):
+    def setup(self, config_path: str):
         """Setup the configuration by reading yaml file"""
 
         with open(config_path, "r", encoding="utf-8") as f:
@@ -33,5 +35,10 @@ class Config:
         """
         for key, value in settings.items():
             if isinstance(value, dict):
-                settings[key] = Config(value)
+                settings[key] = ConfigParser(value)
         return settings
+
+    def __getattribute__(
+        self, name: str
+    ) -> Any:  # used to disable warning when undefined attribute is accessed
+        return super().__getattribute__(name)

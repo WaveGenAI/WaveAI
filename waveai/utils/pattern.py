@@ -2,6 +2,8 @@
 Delay Pattern Module
 """
 
+import typing
+
 import torch
 
 
@@ -12,28 +14,27 @@ class DelayPattern:
     """
 
     def __init__(self, stereo: bool = False):
+        """Initialize the DelayPattern
+
+        Args:
+            stereo (bool, optional): Apply stereo pattern. Defaults to False.
+        """
+
         self._stereo = stereo
 
     def build_delay_pattern_mask(
         self, input_ids: torch.LongTensor, pad_token_id: int, max_seq_length: int
-    ):
+    ) -> typing.Tuple[torch.LongTensor, torch.LongTensor]:
         """Build a delayed pattern mask to the input_ids. Each codebook is offset by the previous codebook by
-        one, giving a delayed pattern mask at the start of sequence and end of sequence. Take the example where there
-        are 4 codebooks and a max sequence length of 8, we have the delayed pattern mask of shape `(codebooks,
-        seq_len)`:
-        - [P, -1, -1, -1, -1, P, P, P]
-        - [P, P, -1, -1, -1, -1, P, P]
-        - [P, P, P, -1, -1, -1, -1, P]
-        - [P, P, P, P, -1, -1, -1, -1]
-        where P is the special padding token id and -1 indicates that the token is valid for prediction. If we include
-        a prompt (decoder input ids), the -1 positions indicate where new tokens should be predicted. Otherwise, the
-        mask is set to the value in the prompt:
-        - [P, a, b, -1, -1, P, P, P]
-        - [P, P, c, d, -1, -1, P, P]
-        - [P, P, P, e, f, -1, -1, P]
-        - [P, P, P, P, g, h, -1, -1]
-        where a-h indicate the input prompt (decoder input ids) that are offset by 1. Now, we only override the -1
-        tokens in our prediction.
+        one token (not when stereo).
+
+        Args:
+            input_ids (torch.LongTensor): the input ids
+            pad_token_id (int): the pad token id
+            max_seq_length (int): the maximum sequence length
+
+        Returns:
+            typing.Tuple[torch.LongTensor, torch.LongTensor]: the delayed pattern mask and the padding mask
         """
         if self._stereo:
             input_ids = self._stereo_convert(input_ids)
@@ -41,19 +42,50 @@ class DelayPattern:
         b, k, seq_len = input_ids.shape
 
         delays_ids = torch.full(
-            (b, k, max_seq_length + (k - 1)),
+            (b, k, max_seq_length),
             pad_token_id,
             dtype=torch.long,
         )
         delays_ids = delays_ids.to(input_ids)
 
-        for k_idx in range(k):
-            delays_ids[:, k_idx, k_idx : max_seq_length + k_idx] = torch.full_like(
-                delays_ids[:, k_idx, k_idx : max_seq_length + k_idx], -1
-            )
+        if not self._stereo:
+            # Create the mono pattern like
+            # [P, -1, -1, -1, -1, -1]
+            # [P, P, -1, -1, -1, -1]
+            # [P, P, P, -1, -1, -1]
+            # etc.
+
+            for k_idx in range(k):
+                delays_ids[:, k_idx, k_idx : max_seq_length + k_idx] = torch.full_like(
+                    delays_ids[:, k_idx, k_idx : max_seq_length + k_idx], -1
+                )
+        else:
+            for col_idx, k_idx in enumerate(range(0, k, 2)):
+                # Create the stereo pattern like
+                # [P, -1, -1, -1, -1, P]
+                # [P, -1, -1, -1, -1, P]
+                # [P, P, -1, -1, -1, -1,]
+                # [P, P, -1, -1, -1, -1]
+                # etc.
+
+                delays_ids[:, k_idx, col_idx : max_seq_length + col_idx] = (
+                    torch.full_like(
+                        delays_ids[:, k_idx, col_idx : max_seq_length + col_idx], -1
+                    )
+                )
+
+                delays_ids[:, k_idx + 1, col_idx : max_seq_length + col_idx] = (
+                    torch.full_like(
+                        delays_ids[:, k_idx, col_idx : max_seq_length + col_idx], -1
+                    )
+                )
 
         for k_idx in range(k):
-            delays_ids[:, k_idx, k_idx : seq_len + k_idx] = input_ids[:, k_idx, :]
+            id_start = torch.where(delays_ids[:, k_idx, :] == -1)[1][0]
+
+            delays_ids[:, k_idx, id_start : min(seq_len + id_start, max_seq_length)] = (
+                input_ids[:, k_idx, : max_seq_length - id_start]
+            )
 
         mask = torch.where(delays_ids == pad_token_id, pad_token_id, -1)
         mask = mask.to(input_ids)
@@ -141,17 +173,34 @@ class DelayPattern:
 
         return out
 
-    def reverse_delay_pattern_mask(self, input_ids):
-        """Reverse the delay pattern mask to the input_ids. This is used to predict the next token in the sequence"""
+    def reverse_delay_pattern_mask(
+        self, input_ids: torch.Tensor, padding_maks: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Reverse the delay pattern mask to the input_ids. This is used to predict the next token in the sequence
 
-        b, k, seq_len = input_ids.shape
+        Args:
+            input_ids (torch.Tensor): the input ids
+            padding_maks (torch.Tensor): the padding mask
 
-        delays_ids = torch.full((b, k, seq_len - (k - 1)), 0, dtype=torch.long)
+        Returns:
+            torch.Tensor: the reversed delay pattern mask
+        """
 
+        output = []
+
+        _, k, _ = input_ids.shape
+
+        # for each codebook, get the first -1 token and append the rest of the sequence according to that
         for k_idx in range(k):
-            delays_ids[:, k_idx, :] = input_ids[
-                :, k_idx, k_idx : seq_len - (k - 1) + k_idx
-            ]
+            first_id = torch.where(padding_maks[:, k_idx, :] == -1)[1][0]
+            output.append(input_ids[:, k_idx, first_id:])
+
+        # get the minimum length of the output
+        min_length = min([t.shape[-1] for t in output])
+        delays_ids = [t[..., :min_length] for t in output]
+
+        delays_ids = torch.stack(delays_ids, dim=1)
 
         if self._stereo:
             delays_ids = self._stereo_unconvert(delays_ids)
