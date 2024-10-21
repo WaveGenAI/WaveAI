@@ -86,7 +86,7 @@ class Generation:
         prompt_padding_mask: torch.Tensor,
         duration=10,
         temperature: float = 1,
-        top_k: int = 10,
+        top_k: int = 150,
     ) -> torch.Tensor:
         """Sample audio from the model.
 
