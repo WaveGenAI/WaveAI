@@ -19,7 +19,7 @@ args.add_argument(
 args.add_argument(
     "--save_path",
     type=str,
-    default="checkpoints",
+    default="./checkpoints",
     required=False,
     help="Path to save the model",
 )

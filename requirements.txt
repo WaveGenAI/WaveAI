@@ -8,5 +8,6 @@ bitsandbytes
 xformers
 rotary_embedding_torch
 wandb
+gradio 
 
 git+https://github.com/descriptinc/audiotools

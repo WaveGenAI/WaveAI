@@ -25,14 +25,14 @@ data:
   max_lyrics_length: 512 
 
 train:
-  max_epochs: 40
-  accumulate_grad_batches: 32
+  max_epochs: 13
+  accumulate_grad_batches: 192
   batch_size: 1
   gradient_clip_val: 1
-  warmup_steps: 200
+  warmup_steps: 4000
   lr_max: 0.00095
   lr_min: 0.000001  
-  test_model: false
+  test_model: true
   train_num_workers: 4
   val_num_workers: 4
   log_every_n_steps: 10_000 

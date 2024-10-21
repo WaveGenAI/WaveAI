@@ -16,7 +16,7 @@ from .utils.utils import gaussian_noise_gen
 
 
 class Trainer(L.LightningModule):
-    def __init__(self, config: ConfigParser, audio_processor: AudioProcessor):
+    def __init__(self, config: ConfigParser, audio_processor: AudioProcessor = None):
         """Initialize the Trainer class.
 
         Args:
@@ -156,9 +156,9 @@ class Trainer(L.LightningModule):
         self.log("train_loss", loss, on_step=True)
         self.loss_metric[0](loss)
 
-        # log the accumulate loss
+        # log the batch loss
         if batch_idx % self.config.train.accumulate_grad_batches == 0:
-            self.log("Accumulate loss", self.loss_metric[0].compute())
+            self.log("Batch loss", self.loss_metric[0].compute())
             self.loss_metric[0].reset()
 
         y = None
