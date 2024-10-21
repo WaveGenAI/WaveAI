@@ -7,6 +7,9 @@ A model that can make edit of music based on a prompt. Follow MusicGen architect
 python -m pip install -r requirements.txt
 ```
 
+# Dataset
+The dataset used is: https://huggingface.co/datasets/WaveGenAI/youtube-cc-by-music
+
 # Launch the trainig
 
 ```py
