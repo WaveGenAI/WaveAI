@@ -101,7 +101,10 @@ class Generation:
             torch.Tensor: the predicted audio tensor
         """
         # tokens: [batch_size, channel * num_codebooks, seq_length]
-        tokens = torch.ones(1, self.num_codebooks, 1).long() * self.pad_token
+        tokens = (
+            torch.ones(1, self.num_codebooks, 1, device=prompt.device).long()
+            * self.pad_token
+        )
         step = duration * 86 + (self.num_codebooks - 1)
         tokens, padding_mask = self.pattern.build_delay_pattern_mask(
             tokens, self.pad_token, step
@@ -110,10 +113,6 @@ class Generation:
         b, k, _ = tokens.size()
         with torch.no_grad():
             for i in range(step):
-                tokens = tokens.to(prompt.device)
-                prompt = prompt.to(prompt.device)
-                prompt_padding_mask = prompt_padding_mask.to(prompt.device)
-
                 logits = self.model.forward(tokens, prompt, prompt_padding_mask)
                 logits = logits[..., -1, :]  # get the last token
                 logits = logits.view(-1, logits.size(-1))  # flatten the logits

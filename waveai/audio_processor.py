@@ -2,8 +2,8 @@ import torch
 from audiotools import AudioSignal
 from transformers import AutoTokenizer
 
-from waveai.text_encoder import T5EncoderBaseModel
 from waveai.audio_autoencoder import DAC
+from waveai.text_encoder import T5EncoderBaseModel
 from waveai.utils.utils import audio_format_converter, convert_to_tensor
 
 
@@ -17,6 +17,9 @@ class AudioProcessor:
         self.text_enc = T5EncoderBaseModel()
         self.audio_codec = DAC()
         self.config = config
+
+    def encode_prompt(self, prompt: list) -> tuple:
+        return self.text_enc(prompt)
 
     @torch.no_grad()
     def collate_fn(self, rows: list) -> tuple:
@@ -58,7 +61,7 @@ class AudioProcessor:
         codes = codes[:, :, : self.config.model.max_seq_length]
 
         # encode the prompt
-        prompts_embeds, prompts_masks = self.text_enc(prompt)
+        prompts_embeds, prompts_masks = self.encode_prompt(prompt)
 
         # TODO: Maybe remove prompt from the return because it's a str and not a tensor (but currently used for logging)
         return codes, prompts_embeds, prompts_masks, prompt

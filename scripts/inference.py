@@ -1,10 +1,10 @@
 import argparse
+
 import gradio as gr
 import torch
 from audiotools import AudioSignal
-from transformers import AutoTokenizer
-import waveai.text_encoder as text_encoder
-from waveai.audio_autoencoder import DAC as audio_autoencoder
+
+from waveai.audio_processor import AudioProcessor
 from waveai.generation import Generation
 from waveai.trainer import Trainer
 from waveai.utils.config_parser import ConfigParser
@@ -21,37 +21,31 @@ def load_model(config_path, checkpoint_path):
     return model, config, device
 
 
-def setup_generation(model, config, device):
-    text_encoder_model = text_encoder.T5EncoderBaseModel()
-    audio_codec = audio_autoencoder()
-    tokenizer = AutoTokenizer.from_pretrained(config.model.tokenizer)
+def setup_generation(model, config):
+    audio_processor = AudioProcessor(config)
     generation = Generation(
         model,
         config.model.num_codebooks,
         config.model.pad_token_id,
         config.model.stereo,
     )
-    return text_encoder_model, audio_codec, tokenizer, generation
+    return audio_processor, generation
 
 
 @torch.no_grad()
-def generate(
-    src_text: str, duration, text_encoder_model, audio_codec, generation, device
-):
-    prompt_embd, prompts_masks = text_encoder_model([src_text])
+def generate(src_text: str, duration, audio_processor, generation, device):
+    prompt_embd, prompts_masks = audio_processor.encode_prompt([src_text])
     prompt_embd = prompt_embd.to(device)
     prompts_masks = prompts_masks.to(device)
     output_ids = generation.inference(prompt_embd, prompts_masks, duration=duration)
-    y = audio_codec.decode(output_ids.cpu()).to(torch.float32)
-    y = AudioSignal(y.cpu().numpy(), sample_rate=audio_codec.sample_rate)
+    y = audio_processor.decode_audio(output_ids)
+
     return y.audio_data, y.sample_rate
 
 
-def gradio_generate(
-    prompt, duration, device, text_encoder_model, audio_codec, generation
-):
+def gradio_generate(prompt, duration, device, audio_processor, generation):
     audio_data, sample_rate = generate(
-        prompt, duration, text_encoder_model, audio_codec, generation, device
+        prompt, duration, audio_processor, generation, device
     )
     return (sample_rate, audio_data.numpy())
 
@@ -70,17 +64,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     model, config, device = load_model(args.config_path, args.checkpoint_path)
-    text_encoder_model, audio_codec, tokenizer, generation = setup_generation(
-        model, config, device
-    )
+    audio_processor, generation = setup_generation(model, config)
 
     demo = gr.Interface(
         fn=lambda prompt, duration: gradio_generate(
             prompt,
             duration,
             device,
-            text_encoder_model,
-            audio_codec,
+            audio_processor,
             generation,
         ),
         inputs=[
