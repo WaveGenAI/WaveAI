@@ -1,10 +1,14 @@
+from typing import List
+
 import torch
 from audiotools import AudioSignal
 from transformers import AutoTokenizer
 
 from waveai.audio_autoencoder import DAC
 from waveai.text_encoder import T5EncoderBaseModel
-from waveai.utils.utils import audio_format_converter, convert_to_tensor
+from waveai.utils.utils import audio_format_converter, make_pad_mask
+
+from .utils.pattern import DelayPattern
 
 
 class AudioProcessor:
@@ -15,11 +19,64 @@ class AudioProcessor:
     def __init__(self, config):
         self.text_tokenizer = AutoTokenizer.from_pretrained(config.model.tokenizer)
         self.text_enc = T5EncoderBaseModel()
+        self.delay_pattern = DelayPattern(
+            config.model.stereo
+        )  # if stereo, use stereo Partial Delay Pattern https://arxiv.org/pdf/2306.05284
         self.audio_codec = DAC()
         self.config = config
 
     def encode_prompt(self, prompt: list) -> tuple:
-        return self.text_enc(prompt)
+        prompt_emds, prompt_masks = self.text_enc(prompt)
+        prompt_masks = (
+            prompt_masks == False
+        )  # invert the mask, true when masked, false when not masked
+        return prompt_emds, prompt_masks
+
+    def prepare_audio(self, codec: list) -> torch.Tensor:
+        # convert list of list to tensor
+        codec = torch.Tensor(codec)
+        # be sure the tensor has the right shape (add channel dimension if needed)
+        codebooks = audio_format_converter(codec, self.config.model.stereo)
+
+        # convert to batch x (channel x num_codebooks) x seq_length
+        codebooks = codebooks.view(-1, codebooks.size(-1)).unsqueeze(0)
+
+        # get the delay pattern
+        #  [[1, 2, 3, 4, 5, 5], -> channel 1
+        #   [1, 2, 3, 4, 5, 5], -> channel 2
+        #   [5, 1, 2, 3, 4, 5], -> channel 1
+        #   [5, 1, 2, 3, 4, 5], -> channel 2
+        #   [...]]
+        # when stereo
+        input_ids, _ = self.delay_pattern.build_delay_pattern_mask(
+            codebooks, self.config.model.pad_token_id, self.config.model.max_seq_length
+        )
+
+        # remove unused batch dimension
+        input_ids = input_ids.squeeze(0)
+
+        return input_ids
+
+    def _pad_codebooks(self, codebooks: List[torch.Tensor], pad_token) -> torch.Tensor:
+        """Pad the codebooks to the same length.
+
+        Args:
+            codebooks (List[torch.Tensor]): the codebooks to pad of shape [(num_codebooks, seq_length)].
+            pad_token (int): the pad token.
+
+        Returns:
+            torch.Tensor: the padded codebooks of shape (batch, num_codebooks, seq_length).
+        """
+
+        # revert k, seq_len to seq_len, k (see https://pytorch.org/docs/stable/generated/torch.nn.utils.rnn.pad_sequence.html)
+        codebooks = [codebook.T for codebook in codebooks]
+        # pad the codebooks
+        padded_codebooks = torch.nn.utils.rnn.pad_sequence(
+            codebooks, padding_value=pad_token
+        )
+        # permute to b, k, seq_len
+        padded_codebooks = padded_codebooks.permute(1, 2, 0)
+        return padded_codebooks
 
     @torch.no_grad()
     def collate_fn(self, rows: list) -> tuple:
@@ -31,40 +88,24 @@ class AudioProcessor:
         Returns:
             tuple: the processed rows.
         """
-
-        rows = [convert_to_tensor(row, self.config.data.audio_column) for row in rows]
-
-        codec = [
-            audio_format_converter(
-                torch.permute(row[self.config.data.audio_column], (2, 1, 0)),
-                self.config.model.stereo,
-            )
-            for row in rows
-        ]
         prompt = [row[self.config.data.text_column] for row in rows]
+        # apply the delay pattern to the audio
+        inputs = [
+            self.prepare_audio(row[self.config.data.audio_column]) for row in rows
+        ]
+        # get the size of the inputs (seq_length)
+        inputs_size = torch.tensor([input.size(-1) for input in inputs])
+        # create the padding mask
+        padding_mask = make_pad_mask(inputs_size)
 
         # Pad the codec tensors and stack them
-        codes = torch.nn.utils.rnn.pad_sequence(
-            codec, batch_first=True, padding_value=-100
-        )
-
-        # convert to batch x channel x num_codebooks x seq_length
-        codes = codes.permute(0, 3, 2, 1).contiguous()
-
-        # batch x (num_codebooks x channels) x seq_length
-        codes = codes.view(codes.size(0), -1, codes.size(-1))
-
-        # convert codes to long
-        codes = codes.long()
-
-        # cut the audio to the max length
-        codes = codes[:, :, : self.config.model.max_seq_length]
+        inputs = self._pad_codebooks(inputs, pad_token=self.config.model.pad_token_id)
 
         # encode the prompt
         prompts_embeds, prompts_masks = self.encode_prompt(prompt)
 
         # TODO: Maybe remove prompt from the return because it's a str and not a tensor (but currently used for logging)
-        return codes, prompts_embeds, prompts_masks, prompt
+        return inputs, padding_mask, prompts_embeds, prompts_masks, prompt
 
     @torch.no_grad()
     def decode_audio(self, codec: torch.Tensor) -> AudioSignal:

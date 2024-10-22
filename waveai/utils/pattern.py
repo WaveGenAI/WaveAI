@@ -106,34 +106,6 @@ class DelayPattern:
         return input_ids_pad
 
     @staticmethod
-    def shift_tokens_right(
-        inputs_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int
-    ):
-        """
-        Shift input ids one token to the right.
-        """
-        # transpose to get (bsz, num_codebooks, seq_len)
-        # inputs_ids_ids = inputs_ids_ids.transpose(1, 2)
-        shifted_inputs_ids = inputs_ids.new_zeros(inputs_ids.shape)
-        shifted_inputs_ids = shifted_inputs_ids.to(inputs_ids)
-
-        shifted_inputs_ids[..., 1:] = inputs_ids[..., :-1].clone()
-        if decoder_start_token_id is None:
-            raise ValueError(
-                "Make sure to set the decoder_start_token_id attribute of the model's configuration."
-            )
-        shifted_inputs_ids[..., 0] = decoder_start_token_id
-
-        if pad_token_id is None:
-            raise ValueError(
-                "Make sure to set the pad_token_id attribute of the model's configuration."
-            )
-        # replace possible -100 values in labels by `pad_token_id`
-        shifted_inputs_ids.masked_fill_(shifted_inputs_ids == -100, pad_token_id)
-
-        return shifted_inputs_ids
-
-    @staticmethod
     def _stereo_convert(codec: torch.Tensor) -> torch.Tensor:
         """Convert the codec tensor to stereo pattern
 

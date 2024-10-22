@@ -58,6 +58,7 @@ if __name__ == "__main__":
         num_workers=config.train.train_num_workers,
         collate_fn=audio_processor.collate_fn,
         pin_memory=True,
+        shuffle=True,
     )
 
     valid_dataloader = DataLoader(

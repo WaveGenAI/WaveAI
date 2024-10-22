@@ -11,8 +11,7 @@ from .generation import Generation
 from .model import WaveAI
 from .utils.config_parser import ConfigParser
 from .utils.logs import LossTensor
-from .utils.pattern import DelayPattern
-from .utils.utils import gaussian_noise_gen
+from .utils.utils import gaussian_noise_gen, shift_tokens_right
 
 
 class Trainer(L.LightningModule):
@@ -26,8 +25,6 @@ class Trainer(L.LightningModule):
 
         super().__init__()
         self.config = config
-
-        self.delay_pattern = DelayPattern(self.config.model.stereo)
 
         self.model = WaveAI(
             self.config.model.num_codebooks,
@@ -81,23 +78,13 @@ class Trainer(L.LightningModule):
         return loss
 
     def step(self, batch, batch_idx) -> torch.Tensor:
-        input_ids, prompts, prompts_masks, *_ = batch
-        # TODO: manage padding mask
+        input_ids, padding_mask, prompts, prompts_masks, *_ = batch
 
         # just for logging (to see the number of tokens)
         self.log("nbm_token", input_ids.numel())
 
-        # get the delay pattern, in this way each token is delayed by the same amount of time
-        input_ids, delay_pattern_mask = self.delay_pattern.build_delay_pattern_mask(
-            input_ids, self.config.model.pad_token_id, self.config.model.max_seq_length
-        )
-
-        inputs_ids = self.delay_pattern.apply_delay_pattern_mask(
-            input_ids, delay_pattern_mask
-        )
-
         # shift the tokens to the right (like that the model will predict the next token and will not see the future)
-        input_ids = self.delay_pattern.shift_tokens_right(
+        input_ids = shift_tokens_right(
             input_ids, self.config.model.pad_token_id, self.config.model.pad_token_id
         )
 
@@ -106,13 +93,13 @@ class Trainer(L.LightningModule):
         labels = input_ids[..., 1:]
 
         # add random noise to the inputs
-        inputs_ids = gaussian_noise_gen(
-            inputs_ids,
-            self.config.train.noise_mean,
-            self.config.train.noise_std,
-            max_val=self.config.model.pad_token_id,
-            ignore_token=[self.config.model.pad_token_id, -100],
-        )
+        # inputs_ids = gaussian_noise_gen(
+        #     inputs_ids,
+        #     self.config.train.noise_mean,
+        #     self.config.train.noise_std,
+        #     max_val=self.config.model.pad_token_id,
+        #     ignore_token=[self.config.model.pad_token_id, -100],
+        # )
 
         logits = self.model(inputs_ids, prompts, prompts_masks)
 

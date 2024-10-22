@@ -1,3 +1,4 @@
+# some codes comes from https://github.com/jasonppy/VoiceCraft/blob/master/models/modules/utils.py
 import random
 
 import torch
@@ -7,19 +8,19 @@ def audio_format_converter(codec: torch.Tensor, to_stereo: bool) -> torch.Tensor
     """Convert the codec tensor to stereo and add a channel dimension if needed.
 
     Args:
-        codec (torch.Tensor): the codec tensor
+        codec (torch.Tensor): the codec tensor of shape (opt channel, num_codebooks, seq_length)
 
     Returns:
-        torch.Tensor: the codec tensor
+        torch.Tensor: the codec tensor of shape (channel, num_codebooks, seq_length)
     """
 
     # if the shape is 2D, add a channel dimension
     if len(codec.shape) == 2:
-        codec = codec.unsqueeze(-1)
+        codec = codec.unsqueeze(0)
 
     # if the codec is mono and the model is stereo, duplicate the channel
-    if codec.shape[-1] == 1 and to_stereo:
-        codec = torch.cat([codec, codec], dim=-1)
+    if codec.shape[0] == 1 and to_stereo:
+        codec = torch.cat([codec, codec], dim=0)
 
     return codec
 
@@ -83,3 +84,59 @@ def gaussian_noise_gen(
     output = torch.where(mask & random_mask, val, output)
 
     return output
+
+
+def shift_tokens_right(
+    inputs_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int
+):
+    """
+    Shift input ids one token to the right.
+    """
+    # transpose to get (bsz, num_codebooks, seq_len)
+    # inputs_ids_ids = inputs_ids_ids.transpose(1, 2)
+    shifted_inputs_ids = inputs_ids.new_zeros(inputs_ids.shape)
+    shifted_inputs_ids = shifted_inputs_ids.to(inputs_ids)
+
+    shifted_inputs_ids[..., 1:] = inputs_ids[..., :-1].clone()
+    if decoder_start_token_id is None:
+        raise ValueError(
+            "Make sure to set the decoder_start_token_id attribute of the model's configuration."
+        )
+    shifted_inputs_ids[..., 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError(
+            "Make sure to set the pad_token_id attribute of the model's configuration."
+        )
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_inputs_ids.masked_fill_(shifted_inputs_ids == -100, pad_token_id)
+
+    return shifted_inputs_ids
+
+
+def make_pad_mask(lengths: torch.Tensor, max_len: int = 0) -> torch.Tensor:
+    """
+    Args:
+      lengths:
+        A 1-D tensor containing sentence lengths.
+      max_len:
+        The length of masks.
+    Returns:
+      Return a 2-D bool tensor, where masked positions
+      are filled with `True` and non-masked positions are
+      filled with `False`.
+
+    >>> lengths = torch.tensor([1, 3, 2, 5])
+    >>> make_pad_mask(lengths)
+    tensor([[False,  True,  True,  True,  True],
+            [False, False, False,  True,  True],
+            [False, False,  True,  True,  True],
+            [False, False, False, False, False]])
+    """
+    assert lengths.ndim == 1, lengths.ndim
+    max_len = max(max_len, lengths.max())
+    n = lengths.size(0)
+    seq_range = torch.arange(0, max_len, device=lengths.device)
+    expaned_lengths = seq_range.unsqueeze(0).expand(n, max_len)
+
+    return expaned_lengths >= lengths.unsqueeze(-1)

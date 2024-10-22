@@ -253,6 +253,7 @@ class WaveAI(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
+        x_padding_mask: torch.Tensor = None,
         memory: torch.Tensor = None,
         memory_key_padding_mask: torch.Tensor = None,
     ) -> torch.tensor:
@@ -261,6 +262,7 @@ class WaveAI(nn.Module):
         Args:
             x (torch.tensor): a tensor that represent the codebook idx of shape
                 (batch_size, num_codebooks, length)
+            x_padding_mask (torch.tensor): a tensor that will mask the padding
             memory (torch.tensor): a tensor that will fee the cross attention of shape
                 (batch_size, seq_len, dim)
             memory_key_padding_mask (torch.tensor): a tensor that will mask the memory
