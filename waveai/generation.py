@@ -100,20 +100,28 @@ class Generation:
         Returns:
             torch.Tensor: the predicted audio tensor
         """
+        self.model.eval()
+
         # tokens: [batch_size, channel * num_codebooks, seq_length]
-        tokens = (
+        inputs = (
             torch.ones(1, self.num_codebooks, 1, device=prompt.device).long()
             * self.pad_token
         )
         step = duration * 86 + (self.num_codebooks - 1)
-        tokens, padding_mask = self.pattern.build_delay_pattern_mask(
-            tokens, self.pad_token, step
+        inputs, padding_mask = self.pattern.build_delay_pattern_mask(
+            inputs, self.pad_token, step
         )
 
-        b, k, _ = tokens.size()
+        b, k, _ = inputs.size()
         with torch.no_grad():
             for i in range(step):
-                logits = self.model.forward(tokens, prompt, prompt_padding_mask)
+                inputs = self.pattern.apply_delay_pattern_mask(inputs, padding_mask)
+                inputs_mask = torch.ones(
+                    b, inputs.size(-1), device=prompt.device
+                ).bool()
+                logits = self.model.forward(
+                    inputs, inputs_mask, prompt, prompt_padding_mask
+                )
                 logits = logits[..., -1, :]  # get the last token
                 logits = logits.view(-1, logits.size(-1))  # flatten the logits
 
@@ -123,17 +131,21 @@ class Generation:
                     b, k, 1
                 )  # reshape the output to [batch_size, num_codebooks, 1]
 
-                tokens = torch.cat([tokens, out], dim=-1)
+                inputs = torch.cat([inputs, out], dim=-1)
 
                 print(f"Step {i + 1} / {step}", end="\r")
 
-        tokens = self.pattern.reverse_delay_pattern_mask(tokens, padding_mask)[..., 1:]
+        outputs = self.pattern.reverse_delay_pattern_mask(inputs, padding_mask)[..., 1:]
 
         if self.stereo:
             # convert 1 x (num_codebooks x channels) x seq_length to 1 x channels x num_codebooks x seq_length
-            tokens = tokens.view(1, 2, self.num_codebooks // 2, -1)
+            outputs = outputs.view(1, 2, self.num_codebooks // 2, -1)
 
             # remove the batch dimension
-            tokens = tokens.squeeze(0)
+            outputs = outputs.squeeze(0)
 
-        return tokens
+        # TODO: change that
+        # replace the pad tokens with 0
+        outputs = torch.where(outputs == self.pad_token, 0, outputs)
+
+        return outputs

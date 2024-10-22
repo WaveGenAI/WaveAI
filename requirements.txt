@@ -9,5 +9,6 @@ xformers
 rotary_embedding_torch
 wandb
 gradio 
+x-transformers
 
 git+https://github.com/descriptinc/audiotools

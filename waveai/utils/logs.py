@@ -24,7 +24,7 @@ class LogPredictionSamplesCallback(Callback):
             outputs["predictions"].write(f"{self.temp_dir.name}/test_{batch_idx}.wav")
 
             self.sample_table.add_data(
-                batch[3][0],  # batch[3] is the prompt, [0] to get the first element
+                batch[4][0],  # batch[4] is the prompt, [0] to get the first element
                 wandb.Audio(f"{self.temp_dir.name}/test_{batch_idx}.wav"),
             )
 

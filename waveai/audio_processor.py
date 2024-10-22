@@ -52,8 +52,8 @@ class AudioProcessor:
             codebooks, self.config.model.pad_token_id, self.config.model.max_seq_length
         )
 
-        # remove unused batch dimension
-        input_ids = input_ids.squeeze(0)
+        # remove unused batch dimension and convert to long tensor
+        input_ids = input_ids.squeeze(0).long()
 
         return input_ids
 
@@ -117,8 +117,7 @@ class AudioProcessor:
         Returns:
             AudioSignal: the audio signal
         """
-
-        y = self.audio_codec.decode(codec.cpu()).to(torch.float32)
+        y = self.audio_codec.decode(codec.cpu())
         y = AudioSignal(y.cpu().numpy(), sample_rate=self.audio_codec.sample_rate)
 
         return y

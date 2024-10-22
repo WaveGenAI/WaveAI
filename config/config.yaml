@@ -27,7 +27,7 @@ data:
 train:
   max_epochs: 13
   accumulate_grad_batches: 192
-  batch_size: 2
+  batch_size: 1
   gradient_clip_val: 1
   warmup_steps: 4000
   lr_max: 0.00095

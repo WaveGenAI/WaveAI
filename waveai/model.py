@@ -2,11 +2,11 @@ import math
 
 import torch
 import torch.nn.functional as F
-import xformers.ops as xops
 from huggingface_hub import hf_hub_download
 from rotary_embedding_torch import RotaryEmbedding
 from torch import nn
 from torch.nn.attention import SDPBackend, sdpa_kernel
+from x_transformers import Decoder, MultiInputTransformerWrapper
 
 
 class MultiheadAttention(nn.Module):
@@ -221,6 +221,7 @@ class WaveAI(nn.Module):
         self,
         codebook_count: int,
         codebook_size: int,
+        max_seq_len: int,
         dim: int,
         depth: int,
         num_heads: int,
@@ -228,21 +229,27 @@ class WaveAI(nn.Module):
         rotary_emb: bool = False,
     ):
         super().__init__()
-
-        self.emb = nn.ModuleList(
-            [nn.Embedding(codebook_size + 1, dim) for _ in range(codebook_count)]
-        )
-
-        self.transformer = Transformer(
-            dim=dim, depth=depth, heads=num_heads, rotary_emb=rotary_emb
-        )
-
-        self.out_norm = nn.LayerNorm(dim)
-        self.linears = nn.ModuleList(
-            [nn.Linear(dim, codebook_size, bias=False) for _ in range(codebook_count)]
-        )
-
         self.num_codebooks = codebook_count
+
+        # set up the embeddings (for each codebook, we have an embedding + 1 for padding)
+        embeddings = {f"codebook {k}": codebook_size + 1 for k in range(codebook_count)}
+
+        self.transformer = MultiInputTransformerWrapper(
+            num_tokens=embeddings,
+            max_seq_len=max_seq_len + codebook_count,
+            emb_dropout=0.1,
+            attn_layers=Decoder(
+                dim=dim,
+                depth=depth,
+                heads=num_heads,
+                attn_flash=True,
+                rotary_pos_emb=rotary_emb,
+                cross_attend=True,
+                layer_dropout=0.1,
+                attn_dropout=0.1,
+                ff_dropout=0.1,
+            ),
+        )
 
         # memory projection
         if memory_dim != dim:
@@ -263,22 +270,38 @@ class WaveAI(nn.Module):
             x (torch.tensor): a tensor that represent the codebook idx of shape
                 (batch_size, num_codebooks, length)
             x_padding_mask (torch.tensor): a tensor that will mask the padding
-            memory (torch.tensor): a tensor that will fee the cross attention of shape
+            memory (torch.tensor): a tensor that will feed the cross attention of shape
                 (batch_size, seq_len, dim)
             memory_key_padding_mask (torch.tensor): a tensor that will mask the memory
         Returns:
             torch.tensor: a tensor that represent the logits prob
         """
 
-        x = sum([emb(x[:, i, :]) for i, emb in enumerate(self.emb)])
+        # revert x_padding_mask and memory_key_padding_mask
+        x_padding_mask = ~x_padding_mask
+        memory_key_padding_mask = ~memory_key_padding_mask
 
         memory = memory.to(x.device)
         memory = self.memory_proj(memory)
 
-        x = self.transformer(x, memory, memory_key_padding_mask)
-        x = self.out_norm(x)
-        x = torch.stack([linear(x) for linear in self.linears], dim=1)
-        return x
+        # create the input dict that contains the codebooks for each embds layer
+        x_bis = {}
+        for k in range(self.num_codebooks):
+            x_bis[f"codebook {k}"] = x[:, k, :]
+
+        out = self.transformer(
+            x_bis,
+            mask=x_padding_mask,
+            context=memory,
+            context_mask=memory_key_padding_mask,
+        )  # returns a dict with keys "codebook 0", "codebook 1", ... and values the probabilities for each token
+
+        # stack the codebooks predictions to get the logits of shape (batch_size, num_codebooks, length, vocab_size)
+        stacked_out = torch.stack(
+            [out[f"codebook {k}"] for k in range(self.num_codebooks)], dim=1
+        )
+
+        return stacked_out
 
     def load_pretrained(self, device, model="facebook/musicgen-small"):
         """Load musicgen to test the model"""

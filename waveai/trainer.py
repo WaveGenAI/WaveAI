@@ -27,13 +27,14 @@ class Trainer(L.LightningModule):
         self.config = config
 
         self.model = WaveAI(
-            self.config.model.num_codebooks,
-            self.config.model.codebook_size,
-            self.config.model.hidden_size,
-            self.config.model.decoder_depth,
-            self.config.model.decoder_heads,
-            self.config.model.memory_dim,
-            self.config.model.rotary_emb,
+            codebook_count=self.config.model.num_codebooks,
+            codebook_size=self.config.model.codebook_size,
+            max_seq_len=self.config.model.max_seq_length,
+            dim=self.config.model.hidden_size,
+            depth=self.config.model.decoder_depth,
+            num_heads=self.config.model.decoder_heads,
+            memory_dim=self.config.model.memory_dim,
+            rotary_emb=self.config.model.rotary_emb,
         )
 
         if self.config.model.compile:
@@ -88,9 +89,17 @@ class Trainer(L.LightningModule):
             input_ids, self.config.model.pad_token_id, self.config.model.pad_token_id
         )
 
+        # shift the padding mask to the right to match the old input_ids position
+        padding_mask = shift_tokens_right(
+            padding_mask, pad_token_id=True, decoder_start_token_id=False
+        )
+
         # create the inputs and labels tensors
         inputs_ids = input_ids[..., :-1]
         labels = input_ids[..., 1:]
+
+        # resize the padding mask to match the input_ids size
+        padding_mask = padding_mask[..., : inputs_ids.size(-1)]
 
         # add random noise to the inputs
         # inputs_ids = gaussian_noise_gen(
@@ -101,7 +110,7 @@ class Trainer(L.LightningModule):
         #     ignore_token=[self.config.model.pad_token_id, -100],
         # )
 
-        logits = self.model(inputs_ids, prompts, prompts_masks)
+        logits = self.model(inputs_ids, padding_mask, prompts, prompts_masks)
 
         # ignore the pad token (when pytorch see -100 in the labels it will ignore it)
         labels = labels.masked_fill(labels == self.config.model.pad_token_id, -100)
@@ -113,13 +122,13 @@ class Trainer(L.LightningModule):
         if not self.config.train.test_model:
             return
 
-        _, prompts, prompts_masks, *_ = batch
+        _, _, prompts, prompts_masks, *_ = batch
 
         # get first value from batch
         prompts = prompts[0, ...].unsqueeze(0)
         prompts_masks = prompts_masks[0, ...].unsqueeze(0)
 
-        tokens = self.generator.sampling(prompts, prompts_masks)
+        tokens = self.generator.inference(prompts, prompts_masks)
         audio = self.audio_processor.decode_audio(tokens)
 
         return audio
@@ -134,6 +143,10 @@ class Trainer(L.LightningModule):
         Returns:
             dict: the loss and the predictions made by the model
         """
+
+        # if the model is not in training mode, put it in training mode
+        if not self.model.training:
+            self.model.train()
 
         # if the batch is too small, skip it (I should do that in the pipeline)
         if batch[0].shape[-1] < (self.config.model.num_codebooks + 1):

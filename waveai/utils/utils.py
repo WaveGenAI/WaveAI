@@ -92,8 +92,6 @@ def shift_tokens_right(
     """
     Shift input ids one token to the right.
     """
-    # transpose to get (bsz, num_codebooks, seq_len)
-    # inputs_ids_ids = inputs_ids_ids.transpose(1, 2)
     shifted_inputs_ids = inputs_ids.new_zeros(inputs_ids.shape)
     shifted_inputs_ids = shifted_inputs_ids.to(inputs_ids)
 
