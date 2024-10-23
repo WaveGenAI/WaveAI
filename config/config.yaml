@@ -37,3 +37,5 @@ train:
   noise_mean: 0.1
   noise_std: 0.5
   duration_audio_test: 10
+  
+  shuffle_data: false

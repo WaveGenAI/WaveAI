@@ -52,13 +52,16 @@ if __name__ == "__main__":
     dataset = load_dataset(config.data.dataset_id, split="train")
     dataset = dataset.train_test_split(test_size=min(len(dataset) * 0.1, 2000))
 
+    if config.train.shuffle_data:
+        dataset["train"] = dataset["train"].shuffle(seed=42)
+
     train_dataloader = DataLoader(
-        dataset["train"].shuffle(seed=42),
+        dataset["train"],
         batch_size=config.train.batch_size,
         num_workers=config.train.train_num_workers,
         collate_fn=audio_processor.collate_fn,
         pin_memory=True,
-        shuffle=True,
+        shuffle=config.train.shuffle_data,
     )
 
     valid_dataloader = DataLoader(
