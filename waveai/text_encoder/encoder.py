@@ -12,7 +12,7 @@ class T5EncoderBaseModel(nn.Module):
     T5 Encoder Model, which is used to encode the input text into a latent space.
     """
 
-    def __init__(self, name: str = "google-t5/t5-large"):
+    def __init__(self, name: str = "google-t5/t5-large", max_seq_len: int = 1024):
         """Encoder Model for Text Data
 
         Args:
@@ -22,6 +22,7 @@ class T5EncoderBaseModel(nn.Module):
 
         self.encoder = T5EncoderModel.from_pretrained(name)
         self.tokenizer = AutoTokenizer.from_pretrained(name)
+        self._max_seq_len = max_seq_len
 
     @torch.no_grad()
     def forward(self, inputs: list) -> torch.Tensor:
@@ -39,16 +40,14 @@ class T5EncoderBaseModel(nn.Module):
             return_tensors="pt",
             padding=True,
             truncation=True,
-            max_length=1024,
+            max_length=self._max_seq_len,
         )
 
         input_ids = encoded["input_ids"]
-        attention_mask = encoded["attention_mask"]
+        padding_mask = encoded["attention_mask"]
 
-        embeddings = self.encoder(input_ids=input_ids, attention_mask=attention_mask)[
+        embeddings = self.encoder(input_ids=input_ids, attention_mask=padding_mask)[
             "last_hidden_state"
         ]
 
-        embeddings = embeddings * attention_mask.unsqueeze(-1)
-
-        return embeddings, attention_mask
+        return embeddings, padding_mask.bool()

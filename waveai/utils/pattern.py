@@ -45,8 +45,8 @@ class DelayPattern:
             (b, k, max_seq_length),
             pad_token_id,
             dtype=torch.long,
+            device=input_ids.device,
         )
-        delays_ids = delays_ids.to(input_ids)
 
         if not self._stereo:
             # Create the mono pattern like

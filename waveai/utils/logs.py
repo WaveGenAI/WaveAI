@@ -19,12 +19,17 @@ class LogPredictionSamplesCallback(Callback):
         self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
     ):
         """Called when the validation batch ends."""
+        *_, prompt = batch
 
-        if "predictions" in outputs and outputs["predictions"] is not None:
+        if (
+            outputs is not None
+            and "predictions" in outputs
+            and outputs["predictions"] is not None
+        ):
             outputs["predictions"].write(f"{self.temp_dir.name}/test_{batch_idx}.wav")
 
             self.sample_table.add_data(
-                batch[4][0],  # batch[4] is the prompt, [0] to get the first element
+                prompt[0],
                 wandb.Audio(f"{self.temp_dir.name}/test_{batch_idx}.wav"),
             )
 
@@ -38,12 +43,18 @@ class LogPredictionSamplesCallback(Callback):
         self.temp_dir = tempfile.TemporaryDirectory()
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
-        if "predictions" in outputs and outputs["predictions"] is not None:
+        *_, prompt = batch
+
+        if (
+            outputs is not None
+            and "predictions" in outputs
+            and outputs["predictions"] is not None
+        ):
             with tempfile.NamedTemporaryFile(suffix=".wav") as f:
                 outputs["predictions"].write(f.name)
                 wandb.log(
                     {
-                        "audio": wandb.Audio(f.name, caption=batch[4][0]),
+                        "audio": wandb.Audio(f.name, caption=prompt[0]),
                     }
                 )
 

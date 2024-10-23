@@ -236,7 +236,8 @@ class WaveAI(nn.Module):
 
         self.transformer = MultiInputTransformerWrapper(
             num_tokens=embeddings,
-            max_seq_len=max_seq_len + codebook_count,
+            max_seq_len=max_seq_len
+            + self.num_codebooks,  # add the number of codebooks to the max_seq_len (for delay pattern)
             emb_dropout=0.1,
             attn_layers=Decoder(
                 dim=dim,
@@ -276,10 +277,7 @@ class WaveAI(nn.Module):
         Returns:
             torch.tensor: a tensor that represent the logits prob
         """
-
-        # revert x_padding_mask and memory_key_padding_mask
-        x_padding_mask = ~x_padding_mask
-        memory_key_padding_mask = ~memory_key_padding_mask
+        # mask: true when attend, false when not attend
 
         memory = memory.to(x.device)
         memory = self.memory_proj(memory)

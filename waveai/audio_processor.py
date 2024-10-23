@@ -2,7 +2,6 @@ from typing import List
 
 import torch
 from audiotools import AudioSignal
-from transformers import AutoTokenizer
 
 from waveai.audio_autoencoder import DAC
 from waveai.text_encoder import T5EncoderBaseModel
@@ -17,8 +16,9 @@ class AudioProcessor:
     """
 
     def __init__(self, config):
-        self.text_tokenizer = AutoTokenizer.from_pretrained(config.model.tokenizer)
-        self.text_enc = T5EncoderBaseModel()
+        self.text_enc = T5EncoderBaseModel(
+            name=config.model.text_encoder, max_seq_len=config.model.max_prompt_length
+        )
         self.delay_pattern = DelayPattern(
             config.model.stereo
         )  # if stereo, use stereo Partial Delay Pattern https://arxiv.org/pdf/2306.05284
@@ -27,9 +27,6 @@ class AudioProcessor:
 
     def encode_prompt(self, prompt: list) -> tuple:
         prompt_emds, prompt_masks = self.text_enc(prompt)
-        prompt_masks = (
-            prompt_masks == False
-        )  # invert the mask, true when masked, false when not masked
         return prompt_emds, prompt_masks
 
     def prepare_audio(self, codec: list) -> torch.Tensor:

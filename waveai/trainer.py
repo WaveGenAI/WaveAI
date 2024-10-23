@@ -79,7 +79,8 @@ class Trainer(L.LightningModule):
         return loss
 
     def step(self, batch, batch_idx) -> torch.Tensor:
-        input_ids, padding_mask, prompts, prompts_masks, *_ = batch
+        input_ids, padding_mask, prompts, prompts_masks, *_, prompt = batch
+        assert isinstance(prompt[0], str), "Prompt must be a string for logging"
 
         # just for logging (to see the number of tokens)
         self.log("nbm_token", input_ids.numel())
@@ -91,7 +92,7 @@ class Trainer(L.LightningModule):
 
         # shift the padding mask to the right to match the old input_ids position
         padding_mask = shift_tokens_right(
-            padding_mask, pad_token_id=True, decoder_start_token_id=False
+            padding_mask, pad_token_id=False, decoder_start_token_id=True
         )
 
         # create the inputs and labels tensors
@@ -128,7 +129,12 @@ class Trainer(L.LightningModule):
         prompts = prompts[0, ...].unsqueeze(0)
         prompts_masks = prompts_masks[0, ...].unsqueeze(0)
 
-        tokens = self.generator.inference(self.model, prompts, prompts_masks)
+        tokens = self.generator.inference(
+            self.model,
+            prompts,
+            prompts_masks,
+            duration=self.config.train.duration_audio_test,
+        )
         audio = self.audio_processor.decode_audio(tokens)
 
         return audio
@@ -172,6 +178,9 @@ class Trainer(L.LightningModule):
         Returns:
             dict: the loss and the predictions made by the model
         """
+        # if the batch is too small, skip it (I should do that in the pipeline)
+        if batch[0].shape[-1] < (self.config.model.num_codebooks + 1):
+            return
 
         loss = self.step(batch, batch_idx)
         self.log("val_loss", loss)

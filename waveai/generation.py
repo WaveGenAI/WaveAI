@@ -115,7 +115,7 @@ class Generation:
         b, k, _ = inputs.size()
         with torch.no_grad():
             for i in range(step):
-                inputs_mask = torch.zeros(
+                inputs_mask = torch.ones(
                     b, inputs.size(-1), device=prompt.device
                 ).bool()
                 logits = model.forward(inputs, inputs_mask, prompt, prompt_padding_mask)
