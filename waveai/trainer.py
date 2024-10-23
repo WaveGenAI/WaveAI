@@ -128,7 +128,7 @@ class Trainer(L.LightningModule):
         prompts = prompts[0, ...].unsqueeze(0)
         prompts_masks = prompts_masks[0, ...].unsqueeze(0)
 
-        tokens = self.generator.inference(prompts, prompts_masks)
+        tokens = self.generator.inference(self.model, prompts, prompts_masks)
         audio = self.audio_processor.decode_audio(tokens)
 
         return audio
@@ -143,11 +143,6 @@ class Trainer(L.LightningModule):
         Returns:
             dict: the loss and the predictions made by the model
         """
-
-        # if the model is not in training mode, put it in training mode
-        if not self.model.training:
-            self.model.train()
-
         # if the batch is too small, skip it (I should do that in the pipeline)
         if batch[0].shape[-1] < (self.config.model.num_codebooks + 1):
             return

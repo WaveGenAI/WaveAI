@@ -82,6 +82,7 @@ class Generation:
 
     def inference(
         self,
+        model,
         prompt: torch.Tensor,
         prompt_padding_mask: torch.Tensor,
         duration=10,
@@ -100,7 +101,6 @@ class Generation:
         Returns:
             torch.Tensor: the predicted audio tensor
         """
-        self.model.eval()
 
         # tokens: [batch_size, channel * num_codebooks, seq_length]
         inputs = (
@@ -115,13 +115,10 @@ class Generation:
         b, k, _ = inputs.size()
         with torch.no_grad():
             for i in range(step):
-                inputs = self.pattern.apply_delay_pattern_mask(inputs, padding_mask)
-                inputs_mask = torch.ones(
+                inputs_mask = torch.zeros(
                     b, inputs.size(-1), device=prompt.device
                 ).bool()
-                logits = self.model.forward(
-                    inputs, inputs_mask, prompt, prompt_padding_mask
-                )
+                logits = model.forward(inputs, inputs_mask, prompt, prompt_padding_mask)
                 logits = logits[..., -1, :]  # get the last token
                 logits = logits.view(-1, logits.size(-1))  # flatten the logits
 

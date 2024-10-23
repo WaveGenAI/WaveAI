@@ -43,7 +43,7 @@ class LogPredictionSamplesCallback(Callback):
                 outputs["predictions"].write(f.name)
                 wandb.log(
                     {
-                        "audio": wandb.Audio(f.name, caption=batch[3][0]),
+                        "audio": wandb.Audio(f.name, caption=batch[4][0]),
                     }
                 )
 
