@@ -32,11 +32,17 @@ class AudioProcessor:
     def prepare_audio(self, codec: list) -> torch.Tensor:
         # convert list of list to tensor
         codec = torch.Tensor(codec)
+
         # be sure the tensor has the right shape (add channel dimension if needed)
         codebooks = audio_format_converter(codec, self.config.model.stereo)
 
         # convert to batch x (channel x num_codebooks) x seq_length
         codebooks = codebooks.view(-1, codebooks.size(-1)).unsqueeze(0)
+
+        if codebooks.size(1) > self.config.model.num_codebooks:
+            codebooks = codebooks[
+                :, : self.config.model.num_codebooks, :
+            ]  # truncate the codebooks (dangerous depending of the delay pattern)
 
         # get the delay pattern
         #  [[1, 2, 3, 4, 5, 5], -> channel 1

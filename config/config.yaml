@@ -1,6 +1,6 @@
 model:
-  num_codebooks: 18
-  stereo: true
+  num_codebooks: 4
+  stereo: false
 
   codebook_size: 1024
   pad_token_id: 1024
@@ -11,7 +11,7 @@ model:
   rotary_emb: false
 
   memory_dim: 1024
-  max_seq_length: 3072
+  max_seq_length: 1920
   max_prompt_length: 1024
 
   text_encoder: 'google-t5/t5-large'
@@ -27,7 +27,7 @@ train:
   accumulate_grad_batches: 32
   batch_size: 1
   gradient_clip_val: 1
-  warmup_steps: 4000
+  warmup_steps: 1
   lr_max: 0.00095
   lr_min: 0.000001  
   test_model: true
@@ -37,5 +37,5 @@ train:
   noise_mean: 0.1
   noise_std: 0.5
   duration_audio_test: 10
-  
-  shuffle_data: false
+
+  shuffle_data: true

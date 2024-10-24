@@ -11,7 +11,7 @@ from .generation import Generation
 from .model import WaveAI
 from .utils.config_parser import ConfigParser
 from .utils.logs import LossTensor
-from .utils.utils import gaussian_noise_gen, shift_tokens_right
+from .utils.utils import shift_tokens_right
 
 
 class Trainer(L.LightningModule):
@@ -80,6 +80,7 @@ class Trainer(L.LightningModule):
 
     def step(self, batch, batch_idx) -> torch.Tensor:
         input_ids, padding_mask, prompts, prompts_masks, *_, prompt = batch
+
         assert isinstance(prompt[0], str), "Prompt must be a string for logging"
 
         # just for logging (to see the number of tokens)
@@ -120,6 +121,14 @@ class Trainer(L.LightningModule):
 
     @torch.no_grad()
     def test_model(self, batch) -> AudioSignal:
+        # if getattr(self, "wait", None) is None:
+        #     self.wait = 0
+        #
+        # self.wait += 1
+        #
+        # if self.wait % 50 != 0:
+        #     return
+
         if not self.config.train.test_model:
             return
 
@@ -130,7 +139,6 @@ class Trainer(L.LightningModule):
         prompts_masks = prompts_masks[0, ...].unsqueeze(0)
 
         tokens = self.generator.inference(
-            self.model,
             prompts,
             prompts_masks,
             duration=self.config.train.duration_audio_test,
@@ -198,7 +206,11 @@ class Trainer(L.LightningModule):
         lr_min = self.config.train.lr_min
 
         # bnb.optim.AdamW8bit optimizer
-        optimizer = bnb.optim.AdamW8bit(
+        # optimizer = bnb.optim.AdamW8bit(
+        #     self.parameters(), lr=lr_max, betas=(0.9, 0.95), weight_decay=0.1
+        # )
+
+        optimizer = torch.optim.AdamW(
             self.parameters(), lr=lr_max, betas=(0.9, 0.95), weight_decay=0.1
         )
 

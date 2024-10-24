@@ -32,11 +32,6 @@ args.add_argument(
 )
 args = args.parse_args()
 
-# opti
-torch.set_float32_matmul_precision("medium")
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
-
 config = ConfigParser(config_path=args.config_path)
 lr_monitor = LearningRateMonitor(logging_interval="step")
 audio_processor = AudioProcessor(config)
@@ -50,10 +45,9 @@ for p in model.parameters():
 if __name__ == "__main__":
     # Load the dataset
     dataset = load_dataset(config.data.dataset_id, split="train")
-    dataset = dataset.train_test_split(test_size=min(len(dataset) * 0.1, 2000))
-
-    if config.train.shuffle_data:
-        dataset["train"] = dataset["train"].shuffle(seed=42)
+    dataset = dataset.train_test_split(
+        test_size=min(len(dataset) * 0.1, 2000), shuffle=config.train.shuffle_data
+    )
 
     train_dataloader = DataLoader(
         dataset["train"],
@@ -72,7 +66,9 @@ if __name__ == "__main__":
         pin_memory=True,
     )
 
-    wandb_logger = WandbLogger(project="WAVEAI", log_model=True)
+    wandb_logger = WandbLogger(
+        project="WAVEAI", log_model=True, save_dir=args.save_path
+    )
     wandb_logger.watch(model)
 
     trainer = L.Trainer(
@@ -83,8 +79,10 @@ if __name__ == "__main__":
         logger=wandb_logger,
         log_every_n_steps=1,
         default_root_dir=args.save_path,
-        precision="bf16-mixed",
+        precision=16,
         profiler="simple",
+        # limit_train_batches=1,
+        # limit_val_batches=0,
     )
 
     trainer.fit(

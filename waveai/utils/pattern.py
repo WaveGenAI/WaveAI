@@ -37,9 +37,13 @@ class DelayPattern:
             typing.Tuple[torch.LongTensor, torch.LongTensor]: the delayed pattern mask and the padding mask
         """
         if self._stereo:
-            input_ids = self._stereo_convert(input_ids)
+            input_ids = self._stereo_convert(
+                input_ids
+            )  # reorganize the input_ids tensor for stereo pattern
 
         b, k, seq_len = input_ids.shape
+
+        assert not self._stereo or k % 2 == 0, "The number of codebooks should be even"
 
         delays_ids = torch.full(
             (b, k, max_seq_length),
@@ -88,7 +92,7 @@ class DelayPattern:
             )
 
         mask = torch.where(delays_ids == pad_token_id, pad_token_id, -1)
-        mask = mask.to(input_ids)
+        mask = mask.to(input_ids).long()
         return delays_ids[..., :seq_len], mask
 
     @staticmethod

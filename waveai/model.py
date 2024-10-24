@@ -236,9 +236,7 @@ class WaveAI(nn.Module):
 
         self.transformer = MultiInputTransformerWrapper(
             num_tokens=embeddings,
-            max_seq_len=max_seq_len
-            + self.num_codebooks,  # add the number of codebooks to the max_seq_len (for delay pattern)
-            emb_dropout=0.1,
+            max_seq_len=max_seq_len,  # add the number of codebooks to the max_seq_len (for delay pattern)
             attn_layers=Decoder(
                 dim=dim,
                 depth=depth,
@@ -246,9 +244,6 @@ class WaveAI(nn.Module):
                 attn_flash=True,
                 rotary_pos_emb=rotary_emb,
                 cross_attend=True,
-                layer_dropout=0.1,
-                attn_dropout=0.1,
-                ff_dropout=0.1,
             ),
         )
 

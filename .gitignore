@@ -173,3 +173,4 @@ WAVEAI/
 *.mp3
 
 pretrained/
+.gradio

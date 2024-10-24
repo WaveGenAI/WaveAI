@@ -4,63 +4,6 @@ import torch.nn.functional as F
 from .utils.pattern import DelayPattern
 
 
-def top_k_top_p_filtering(
-    logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1
-):
-    """Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
-    Args:
-        logits: logits distribution shape (batch size, vocabulary size)
-        if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
-        if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
-            Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
-        Make sure we keep at least min_tokens_to_keep per batch example in the output
-    From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
-    """
-    if top_k > 0:
-        top_k = min(max(top_k, min_tokens_to_keep), logits.size(-1))  # Safety check
-        # Remove all tokens with a probability less than the last token of the top-k
-        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
-        logits[indices_to_remove] = filter_value
-
-    if top_p < 1.0:
-        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-
-        # Remove tokens with cumulative probability above the threshold (token with 0 are kept)
-        sorted_indices_to_remove = cumulative_probs > top_p
-        if min_tokens_to_keep > 1:
-            # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
-            sorted_indices_to_remove[..., :min_tokens_to_keep] = 0
-        # Shift the indices to the right to keep also the first token above the threshold
-        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-        sorted_indices_to_remove[..., 0] = 0
-
-        # scatter sorted tensors to original indexing
-        indices_to_remove = sorted_indices_to_remove.scatter(
-            1, sorted_indices, sorted_indices_to_remove
-        )
-        logits[indices_to_remove] = filter_value
-    return logits
-
-
-def topk_sampling(logits, top_k=10, top_p=1.0, temperature=1.0):
-    # temperature: (`optional`) float
-    #     The value used to module the next token probabilities. Must be strictly positive. Default to 1.0.
-    # top_k: (`optional`) int
-    #     The number of highest probability vocabulary tokens to keep for top-k-filtering. Between 1 and infinity. Default to 50.
-    # top_p: (`optional`) float
-    #     The cumulative probability of parameter highest probability vocabulary tokens to keep for nucleus sampling. Must be between 0 and 1. Default to 1.
-
-    # Temperature (higher temperature => more likely to sample low probability tokens)
-    if temperature != 1.0:
-        logits = logits / temperature
-    # Top-p/top-k filtering
-    logits = top_k_top_p_filtering(logits, top_k=top_k, top_p=top_p)
-    # Sample
-    token = torch.multinomial(F.softmax(logits, dim=-1), num_samples=1)
-    return token
-
-
 class Generation:
     """
     Generation class to generate audio samples from the model.
@@ -82,7 +25,6 @@ class Generation:
 
     def inference(
         self,
-        model,
         prompt: torch.Tensor,
         prompt_padding_mask: torch.Tensor,
         duration=10,
@@ -102,34 +44,69 @@ class Generation:
             torch.Tensor: the predicted audio tensor
         """
 
-        # tokens: [batch_size, channel * num_codebooks, seq_length]
+        # from datasets import load_dataset
+
+        # dataset = load_dataset("WaveGenAI/dataset", split="train")
+        # dataset = dataset.train_test_split(
+        #     test_size=min(len(dataset) * 0.1, 2000), shuffle=False
+        # )
+        # dataset = dataset["train"]
+        # audio = torch.Tensor(dataset[0]["codes"]).view(1, 18, -1)[
+        #     ..., : self.num_codebooks, :500
+        # ]
+        # inputs = audio.to(prompt.device)
+
         inputs = (
             torch.ones(1, self.num_codebooks, 1, device=prompt.device).long()
             * self.pad_token
         )
+
         step = duration * 86 + (self.num_codebooks - 1)
         inputs, padding_mask = self.pattern.build_delay_pattern_mask(
-            inputs, self.pad_token, step
+            inputs, self.pad_token, inputs.shape[-1] + step
         )
 
-        b, k, _ = inputs.size()
+        # padding mask is usefull to get the index where the prediction starts and remove the tokens
+        # generated where padding is applied
+
         with torch.no_grad():
             for i in range(step):
+                inputs = self.pattern.apply_delay_pattern_mask(inputs, padding_mask)
+
+                # create padding mask
                 inputs_mask = torch.ones(
-                    b, inputs.size(-1), device=prompt.device
+                    inputs.shape[0],
+                    inputs.shape[2],
+                    device=inputs.device,
                 ).bool()
-                logits = model.forward(inputs, inputs_mask, prompt, prompt_padding_mask)
-                logits = logits[..., -1, :]  # get the last token
-                logits = logits.view(-1, logits.size(-1))  # flatten the logits
 
-                # Sample the next token
-                out = topk_sampling(logits, top_k=top_k, temperature=temperature)
-                out = out.view(
-                    b, k, 1
-                )  # reshape the output to [batch_size, num_codebooks, 1]
+                # generate the next token
+                logits = self.model.forward(
+                    inputs, inputs_mask, prompt, prompt_padding_mask
+                )[
+                    :, :, -1, :
+                ]  # b, k, seq_length, vocab_size
 
-                inputs = torch.cat([inputs, out], dim=-1)
+                # apply temperature
+                logits = logits / temperature
 
+                # convert logits to probabilities
+                logits = F.softmax(logits, dim=-1)
+
+                # get the top k largest tokens of shape b, k, top_k
+                topk_tokens, indices = logits.topk(top_k, dim=-1)
+
+                # convert to 2D tensor
+                topk_tokens = topk_tokens.view(-1, top_k)
+
+                # sample from the top k tokens, it returns the indices of the sampled tokens
+                samples = torch.multinomial(topk_tokens, 1).unsqueeze(0)
+
+                # get the indices of the sampled tokens
+                indexs = torch.gather(indices, -1, samples)
+
+                # concatenate the sampled tokens to the inputs
+                inputs = torch.cat([inputs, indexs], dim=2)
                 print(f"Step {i + 1} / {step}", end="\r")
 
         outputs = self.pattern.reverse_delay_pattern_mask(inputs, padding_mask)[..., 1:]
