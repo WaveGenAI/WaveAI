@@ -11,7 +11,7 @@ model:
   rotary_emb: true
 
   memory_dim: 1024
-  max_seq_length: 2688
+  max_seq_length: 2288
   max_prompt_length: 1024
 
   text_encoder: 'google-t5/t5-large'
@@ -36,5 +36,7 @@ train:
   log_every_n_steps: 10_000 
   duration_audio_test: 10
   shuffle_data: true
+  noise_mean: 0.1
+  noise_std: 0.5
 
   debug: false

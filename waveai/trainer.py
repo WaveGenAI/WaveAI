@@ -80,7 +80,6 @@ class Trainer(L.LightningModule):
     def step(self, batch, batch_idx) -> torch.Tensor:
         input_ids, padding_mask, prompts, prompts_masks, *_, prompt = batch
         assert isinstance(prompt[0], str), "Prompt must be a string for logging"
-
         # just for logging (to see the number of tokens)
         self.log("nbm_token", input_ids.numel())
 
@@ -119,6 +118,9 @@ class Trainer(L.LightningModule):
 
     @torch.no_grad()
     def test_model(self, batch) -> AudioSignal:
+        if not self.config.train.test_model:
+            return
+
         # log audio every 50 steps when in debug mode
         if self.config.train.debug:
             if getattr(self, "wait", None) is None:
