@@ -1,4 +1,3 @@
-import bitsandbytes as bnb
 import lightning as L
 import torch
 from audiotools import AudioSignal
@@ -80,7 +79,6 @@ class Trainer(L.LightningModule):
 
     def step(self, batch, batch_idx) -> torch.Tensor:
         input_ids, padding_mask, prompts, prompts_masks, *_, prompt = batch
-
         assert isinstance(prompt[0], str), "Prompt must be a string for logging"
 
         # just for logging (to see the number of tokens)
@@ -204,11 +202,6 @@ class Trainer(L.LightningModule):
         warmup_steps = self.config.train.warmup_steps
         lr_max = self.config.train.lr_max
         lr_min = self.config.train.lr_min
-
-        # bnb.optim.AdamW8bit optimizer
-        # optimizer = bnb.optim.AdamW8bit(
-        #     self.parameters(), lr=lr_max, betas=(0.9, 0.95), weight_decay=0.1
-        # )
 
         optimizer = torch.optim.AdamW(
             self.parameters(), lr=lr_max, betas=(0.9, 0.95), weight_decay=0.1

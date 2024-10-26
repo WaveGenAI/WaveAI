@@ -16,7 +16,7 @@ def load_model(config_path, checkpoint_path):
     model = Trainer.load_from_checkpoint(
         checkpoint_path=checkpoint_path, config=config, audio_processor=None
     ).model
-    model.to(device)
+    model.to(device).eval()
     print(f"Loaded model from {checkpoint_path}")
     return model, config, device
 
