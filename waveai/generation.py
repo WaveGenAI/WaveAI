@@ -44,18 +44,6 @@ class Generation:
             torch.Tensor: the predicted audio tensor
         """
 
-        # from datasets import load_dataset
-
-        # dataset = load_dataset("WaveGenAI/dataset", split="train")
-        # dataset = dataset.train_test_split(
-        #     test_size=min(len(dataset) * 0.1, 2000), shuffle=False
-        # )
-        # dataset = dataset["train"]
-        # audio = torch.Tensor(dataset[0]["codes"]).view(1, 18, -1)[
-        #     ..., : self.num_codebooks, :500
-        # ]
-        # inputs = audio.to(prompt.device)
-
         inputs = (
             torch.ones(1, self.num_codebooks, 1, device=prompt.device).long()
             * self.pad_token

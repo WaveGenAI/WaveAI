@@ -2,7 +2,7 @@ import argparse
 
 import lightning as L
 import torch
-from datasets import load_dataset
+from datasets import Dataset, load_dataset
 from lightning.pytorch.callbacks import LearningRateMonitor
 from lightning.pytorch.loggers import WandbLogger
 from torch.utils.data import DataLoader
@@ -46,8 +46,22 @@ if __name__ == "__main__":
     # Load the dataset
     dataset = load_dataset(config.data.dataset_id, split="train")
     dataset = dataset.train_test_split(
-        test_size=min(len(dataset) * 0.1, 2000), shuffle=config.train.shuffle_data
+        test_size=min(len(dataset) * 0.1, 2000),
+        shuffle=config.train.shuffle_data and not config.train.debug,
     )
+
+    # args for the trainer
+    kwargs = {}
+
+    if config.train.debug:
+        first_row = dataset["train"][0]
+        duplicated_data = Dataset.from_dict(
+            {key: [value] * 1000 for key, value in first_row.items()}
+        )
+        dataset["train"] = duplicated_data
+
+        # disable validation
+        kwargs["limit_val_batches"] = 0
 
     train_dataloader = DataLoader(
         dataset["train"],
@@ -55,7 +69,7 @@ if __name__ == "__main__":
         num_workers=config.train.train_num_workers,
         collate_fn=audio_processor.collate_fn,
         pin_memory=True,
-        shuffle=config.train.shuffle_data,
+        shuffle=config.train.shuffle_data and not config.train.debug,
     )
 
     valid_dataloader = DataLoader(
@@ -81,8 +95,7 @@ if __name__ == "__main__":
         default_root_dir=args.save_path,
         precision=16,
         profiler="simple",
-        # limit_train_batches=1,
-        # limit_val_batches=0,
+        **kwargs,
     )
 
     trainer.fit(

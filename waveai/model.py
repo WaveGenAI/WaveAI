@@ -251,7 +251,7 @@ class WaveAI(nn.Module):
                 attn_dropout=0.1,
                 ff_dropout=0.1,
                 attn_kv_heads=num_heads
-                // 4,  # for example, if num_heads=32, attn_kv_heads=8
+                // 4,  # for example, if num_heads=32, attn_kv_heads=8 like llama3
             ),
         )
 

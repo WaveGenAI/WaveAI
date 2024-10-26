@@ -10,7 +10,7 @@ from .generation import Generation
 from .model import WaveAI
 from .utils.config_parser import ConfigParser
 from .utils.logs import LossTensor
-from .utils.utils import shift_tokens_right
+from .utils.utils import gaussian_noise_gen, shift_tokens_right
 
 
 class Trainer(L.LightningModule):
@@ -101,14 +101,14 @@ class Trainer(L.LightningModule):
         # resize the padding mask to match the input_ids size
         padding_mask = padding_mask[..., : inputs_ids.size(-1)]
 
-        # add random noise to the inputs
-        # inputs_ids = gaussian_noise_gen(
-        #     inputs_ids,
-        #     self.config.train.noise_mean,
-        #     self.config.train.noise_std,
-        #     max_val=self.config.model.pad_token_id,
-        #     ignore_token=[self.config.model.pad_token_id, -100],
-        # )
+        if getattr(self.config.train, "noise", False):
+            inputs_ids = gaussian_noise_gen(
+                inputs_ids,
+                self.config.train.noise_mean,
+                self.config.train.noise_std,
+                max_val=self.config.model.pad_token_id,
+                ignore_token=[self.config.model.pad_token_id, -100],
+            )
 
         logits = self.model(inputs_ids, padding_mask, prompts, prompts_masks)
 
@@ -119,16 +119,15 @@ class Trainer(L.LightningModule):
 
     @torch.no_grad()
     def test_model(self, batch) -> AudioSignal:
-        # if getattr(self, "wait", None) is None:
-        #     self.wait = 0
-        #
-        # self.wait += 1
-        #
-        # if self.wait % 50 != 0:
-        #     return
+        # log audio every 50 steps when in debug mode
+        if self.config.train.debug:
+            if getattr(self, "wait", None) is None:
+                self.wait = 0
 
-        if not self.config.train.test_model:
-            return
+            self.wait += 1
+
+            if self.wait % 100 != 0:
+                return
 
         _, _, prompts, prompts_masks, *_ = batch
 
@@ -169,7 +168,10 @@ class Trainer(L.LightningModule):
             self.loss_metric[0].reset()
 
         y = None
-        if batch_idx % self.config.train.log_every_n_steps == 0:
+        if (
+            batch_idx % self.config.train.log_every_n_steps == 0
+            or self.config.train.debug
+        ):
             y = self.test_model(batch)
 
         return {"loss": loss, "predictions": y}
