@@ -2,6 +2,8 @@
 import random
 
 import torch
+import webdataset as wds
+from datasets import load_dataset
 
 
 def audio_format_converter(codec: torch.Tensor, to_stereo: bool) -> torch.Tensor:
@@ -138,3 +140,47 @@ def make_pad_mask(lengths: torch.Tensor, max_len: int = 0) -> torch.Tensor:
     expaned_lengths = seq_range.unsqueeze(0).expand(n, max_len)
 
     return expaned_lengths < lengths.unsqueeze(-1)
+
+
+def load_webdataset(
+    dataset_name: str, split_name: str, map: callable = None, shuffle: bool = True
+) -> wds.WebDataset:
+    """Load a webdataset dataset.
+
+    Args:
+        dataset_name (str): the name of the dataset
+        split_name (str): the name of the split
+        map (callable): the map function. Defaults to None.
+        shuffle (bool, optional): shuffle the datase. Defaults to True.
+
+    Returns:
+        wds.WebDataset: the webdataset dataset
+    """
+    dataset = load_dataset(dataset_name, streaming=True)
+    org, dataset_name = dataset_name.split("/")
+    n_shards = dataset[split_name].n_shards
+
+    url = f"/media/works/data/data/{split_name}-{{000000..{n_shards - 1}}}.tar"
+    # url = f"pipe:curl --connect-timeout 60 --retry 50 --retry-delay 10 --retry-all-errors -f -s -L {url} -H 'Authorization:Bearer {get_token()}'"
+
+    if shuffle:
+        dataset = wds.DataPipeline(
+            wds.SimpleShardList(url),
+            wds.detshuffle(),
+            wds.split_by_node,
+            wds.split_by_worker,
+            wds.tarfile_to_samples(),
+            wds.decode(),
+            wds.map(map),
+        )
+    else:
+        dataset = wds.DataPipeline(
+            wds.SimpleShardList(url),
+            wds.split_by_node,
+            wds.split_by_worker,
+            wds.tarfile_to_samples(),
+            wds.decode(),
+            wds.map(map),
+        )
+
+    return dataset

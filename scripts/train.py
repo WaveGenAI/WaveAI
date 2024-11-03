@@ -11,6 +11,7 @@ from waveai.audio_processor import AudioProcessor
 from waveai.trainer import Trainer
 from waveai.utils.config_parser import ConfigParser
 from waveai.utils.logs import LogPredictionSamplesCallback
+from waveai.utils.utils import load_webdataset
 
 args = argparse.ArgumentParser()
 args.add_argument(
@@ -42,38 +43,51 @@ for p in model.parameters():
         torch.nn.init.normal_(p, 0, 0.02)
 
 
+# skip samples that are too short
+def select(sample):
+    audio = sample[config.data.audio_column]
+
+    if audio.shape[-1] < (config.model.num_codebooks * 2):
+        return None
+
+    return sample
+
+
 if __name__ == "__main__":
     # Load the dataset
-    dataset = load_dataset(config.data.dataset_id, split="train")
-    dataset = dataset.train_test_split(
-        test_size=min(len(dataset) * 0.1, 2000),
-        shuffle=config.train.shuffle_data and not config.train.debug,
+    dataset_train = load_webdataset(
+        config.data.dataset_id,
+        "train",
+        map=select,
+        shuffle=config.data.shuffle_data and not config.train.debug,
+    ).with_length(config.data.train_size)
+
+    dataset_test = load_webdataset(
+        config.data.dataset_id, "test", map=select, shuffle=False
     )
 
     # args for the trainer
     kwargs = {}
 
     if config.train.debug:
-        first_row = dataset["train"][0]
+        first_row = next(iter(dataset_train))
         duplicated_data = Dataset.from_dict(
-            {key: [value] * 1000 for key, value in first_row.items()}
+            {key: [value] * 500 for key, value in first_row.items()}
         )
-        dataset["train"] = duplicated_data
+        dataset_train = duplicated_data
 
         # disable validation
         kwargs["limit_val_batches"] = 0
-
     train_dataloader = DataLoader(
-        dataset["train"],
+        dataset_train,
         batch_size=config.train.batch_size,
         num_workers=config.train.train_num_workers,
         collate_fn=audio_processor.collate_fn,
         pin_memory=True,
-        shuffle=config.train.shuffle_data and not config.train.debug,
     )
 
     valid_dataloader = DataLoader(
-        dataset["test"],
+        dataset_test,
         batch_size=config.train.batch_size,
         num_workers=config.train.val_num_workers,
         collate_fn=audio_processor.collate_fn,

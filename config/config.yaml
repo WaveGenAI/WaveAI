@@ -19,9 +19,12 @@ model:
 
 data:
   dataset_id: 'WaveGenAI/dataset'
-  audio_column: 'codes'
-  text_column: 'prompt'
-
+  audio_column: 'codes.npy'
+  text_column: 'prompt.txt'
+  audio_embed_column: 'embd.npy'
+  shuffle_data: false
+  train_size: 259113
+  
 train:
   max_epochs: 13
   accumulate_grad_batches: 32

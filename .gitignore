@@ -174,3 +174,4 @@ WAVEAI/
 
 pretrained/
 .gradio
+test*.py
