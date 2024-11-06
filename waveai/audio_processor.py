@@ -77,9 +77,19 @@ class AudioProcessor:
         padded_codebooks = torch.nn.utils.rnn.pad_sequence(
             codebooks, padding_value=pad_token
         )
+
         # permute to b, k, seq_len
         padded_codebooks = padded_codebooks.permute(1, 2, 0)
-        return padded_codebooks
+
+        pad_full_length = torch.zeros(
+            padded_codebooks.size(0),
+            padded_codebooks.size(1),
+            self.config.model.max_seq_length,
+        ).fill_(pad_token)
+
+        pad_full_length[:, :, : padded_codebooks.size(2)] = padded_codebooks
+
+        return pad_full_length.long()
 
     @torch.no_grad()
     def collate_fn(self, rows: list) -> tuple:
@@ -99,7 +109,7 @@ class AudioProcessor:
         # get the size of the inputs (seq_length)
         inputs_size = torch.tensor([input.size(-1) for input in inputs])
         # create the padding mask
-        padding_mask = make_pad_mask(inputs_size)
+        padding_mask = make_pad_mask(inputs_size, self.config.model.max_seq_length)
 
         # Pad the codec tensors and stack them
         inputs = self._pad_codebooks(inputs, pad_token=self.config.model.pad_token_id)
@@ -107,8 +117,18 @@ class AudioProcessor:
         # encode the prompt
         prompts_embeds, prompts_masks = self.encode_prompt(prompt)
 
+        # audioMAE embeds for cosine similarity
+        labels_mae = [
+            torch.Tensor(row[self.config.data.audio_embed_column]) for row in rows
+        ]
+
+        labels_mae = [label.view(label.shape[0], -1) for label in labels_mae]
+
+        # stack the audio embeds
+        labels_mae = torch.stack(labels_mae)
+
         # TODO: Maybe remove prompt from the return because it's a str and not a tensor (but currently used for logging)
-        return inputs, padding_mask, prompts_embeds, prompts_masks, prompt
+        return inputs, padding_mask, prompts_embeds, prompts_masks, labels_mae, prompt
 
     @torch.no_grad()
     def decode_audio(self, codec: torch.Tensor) -> AudioSignal:

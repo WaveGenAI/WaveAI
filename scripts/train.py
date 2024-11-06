@@ -38,6 +38,10 @@ lr_monitor = LearningRateMonitor(logging_interval="step")
 audio_processor = AudioProcessor(config)
 model = Trainer(config, audio_processor)
 
+torch.autograd.set_detect_anomaly(True)
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+
 for p in model.parameters():
     if p.dim() > 1:
         torch.nn.init.normal_(p, 0, 0.02)
@@ -107,7 +111,6 @@ if __name__ == "__main__":
         logger=wandb_logger,
         log_every_n_steps=1,
         default_root_dir=args.save_path,
-        precision=16,
         profiler="simple",
         **kwargs,
     )

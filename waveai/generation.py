@@ -69,11 +69,11 @@ class Generation:
                 ).bool()
 
                 # generate the next token
-                logits = self.model.forward(
+                logits, _ = self.model.forward(
                     inputs, inputs_mask, prompt, prompt_padding_mask
-                )[
-                    :, :, -1, :
-                ]  # b, k, seq_length, vocab_size
+                )
+
+                logits = logits[:, :, -1, :]  # b, k, seq_length, vocab_size
 
                 # apply temperature
                 logits = logits / temperature
