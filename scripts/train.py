@@ -64,7 +64,7 @@ if __name__ == "__main__":
         "train",
         map=select,
         shuffle=config.data.shuffle_data and not config.train.debug,
-    ).with_length(config.data.train_size)
+    )
 
     dataset_test = load_webdataset(
         config.data.dataset_id, "test", map=select, shuffle=False

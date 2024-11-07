@@ -18,7 +18,7 @@ model:
   compile: false
 
 data:
-  dataset_id: 'WaveGenAI/dataset'
+  dataset_id: 'WaveGenAI/audio'
   audio_column: 'codes.npy'
   text_column: 'prompt.txt'
   audio_embed_column: 'embd.npy'

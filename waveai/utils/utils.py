@@ -143,25 +143,26 @@ def make_pad_mask(lengths: torch.Tensor, max_len: int = 0) -> torch.Tensor:
 
 
 def load_webdataset(
-    dataset_name: str, split_name: str, map: callable = None, shuffle: bool = True
+    dataset_name: str, split_name: str, map_func: callable = None, shuffle: bool = True
 ) -> wds.WebDataset:
     """Load a webdataset dataset.
 
     Args:
         dataset_name (str): the name of the dataset
         split_name (str): the name of the split
-        map (callable): the map function. Defaults to None.
+        map_func (callable): the map function. Defaults to None.
         shuffle (bool, optional): shuffle the datase. Defaults to True.
 
     Returns:
         wds.WebDataset: the webdataset dataset
     """
+
     dataset = load_dataset(dataset_name, streaming=True)
     org, dataset_name = dataset_name.split("/")
     n_shards = dataset[split_name].n_shards
 
-    url = f"/media/works/data/data/{split_name}-{{000000..{n_shards - 1}}}.tar"
-    # url = f"pipe:curl --connect-timeout 60 --retry 50 --retry-delay 10 --retry-all-errors -f -s -L {url} -H 'Authorization:Bearer {get_token()}'"
+    url = f"https://huggingface.co/datasets/{org}/{dataset_name}/resolve/main/data/{split_name}-{{000000..{n_shards - 1}}}.tar"
+    url = f"pipe:curl --connect-timeout 30 --retry 30 --retry-delay 2 -f -s -L {url} -H 'Authorization:Bearer {get_token()}'"
 
     if shuffle:
         dataset = wds.DataPipeline(
@@ -169,18 +170,18 @@ def load_webdataset(
             wds.detshuffle(),
             wds.split_by_node,
             wds.split_by_worker,
-            wds.tarfile_to_samples(),
+            wds.tarfile_to_samples(handler=wds.warn_and_stop),
             wds.decode(),
-            wds.map(map),
+            wds.map(map_func) if map_func else None,
         )
     else:
         dataset = wds.DataPipeline(
             wds.SimpleShardList(url),
             wds.split_by_node,
             wds.split_by_worker,
-            wds.tarfile_to_samples(),
+            wds.tarfile_to_samples(handler=wds.warn_and_stop),
             wds.decode(),
-            wds.map(map),
+            wds.map(map_func) if map_func else None,
         )
 
     return dataset

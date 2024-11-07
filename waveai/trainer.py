@@ -1,3 +1,6 @@
+import math
+import os
+
 import lightning as L
 import torch
 from audiotools import AudioSignal
@@ -12,6 +15,7 @@ from .model import WaveAI
 from .utils.config_parser import ConfigParser
 from .utils.logs import LossTensor
 from .utils.utils import gaussian_noise_gen, shift_tokens_right
+import bitsandbytes as bnb
 
 
 class Trainer(L.LightningModule):
@@ -155,6 +159,10 @@ class Trainer(L.LightningModule):
             if self.wait % 100 != 0:
                 return
 
+        self.trainer.save_checkpoint(
+            os.path.join(self.trainer.checkpoint_callback.dirpath, "model.ckpt")
+        )
+
         _, _, prompts, prompts_masks, *_ = batch
 
         # get first value from batch
@@ -231,7 +239,7 @@ class Trainer(L.LightningModule):
         lr_max = self.config.train.lr_max
         lr_min = self.config.train.lr_min
 
-        optimizer = torch.optim.AdamW(
+        optimizer = bnb.optim.AdamW8bit(
             self.parameters(), lr=lr_max, betas=(0.9, 0.95), weight_decay=0.1
         )
 
@@ -241,9 +249,21 @@ class Trainer(L.LightningModule):
         warmup_scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda_warmup)
 
         # CosineAnnealingLR Scheduler
-        total_steps = self.trainer.estimated_stepping_batches
+        total_batch = math.ceil(
+            self.config.data.train_size
+            / (self.config.train.batch_size * self.config.train.accumulate_grad_batches)
+        )
+        max_estimated_steps = total_batch * max(self.trainer.max_epochs, 1)
+        max_estimated_steps = (
+            min(max_estimated_steps, self.trainer.max_steps)
+            if self.trainer.max_steps != -1
+            else max_estimated_steps
+        )
+
+        print("Total steps:", max_estimated_steps)
+
         cosine_scheduler = lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=(total_steps - warmup_steps), eta_min=lr_min
+            optimizer, T_max=(max_estimated_steps - warmup_steps), eta_min=lr_min
         )
 
         # Combine schedulers with SequentialLR
