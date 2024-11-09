@@ -5,6 +5,7 @@ import bitsandbytes as bnb
 import lightning as L
 import torch
 from audiotools import AudioSignal
+from ema_pytorch import EMA
 from lightning.pytorch.utilities import grad_norm
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
@@ -30,6 +31,11 @@ class Trainer(L.LightningModule):
         super().__init__()
         self.config = config
 
+        self._total_step_per_epoch = math.ceil(
+            self.config.data.train_size
+            / (self.config.train.batch_size * self.config.train.accumulate_grad_batches)
+        )
+
         self.model = WaveAI(
             codebook_count=self.config.model.num_codebooks,
             codebook_size=self.config.model.codebook_size,
@@ -39,6 +45,13 @@ class Trainer(L.LightningModule):
             num_heads=self.config.model.decoder_heads,
             memory_dim=self.config.model.memory_dim,
             rotary_emb=self.config.model.rotary_emb,
+        )
+
+        self.ema = EMA(
+            self.model,
+            update_after_step=500,
+            update_every=10,
+            update_model_with_ema_every=self._total_step_per_epoch,
         )
 
         if self.config.model.compile:
@@ -251,11 +264,9 @@ class Trainer(L.LightningModule):
         warmup_scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda_warmup)
 
         # CosineAnnealingLR Scheduler
-        total_batch = math.ceil(
-            self.config.data.train_size
-            / (self.config.train.batch_size * self.config.train.accumulate_grad_batches)
+        max_estimated_steps = self._total_step_per_epoch * max(
+            self.trainer.max_epochs, 1
         )
-        max_estimated_steps = total_batch * max(self.trainer.max_epochs, 1)
         max_estimated_steps = (
             min(max_estimated_steps, self.trainer.max_steps)
             if self.trainer.max_steps != -1
@@ -280,3 +291,6 @@ class Trainer(L.LightningModule):
     def on_before_optimizer_step(self, optimizer):
         norms = grad_norm(self.model, norm_type=2)
         self.log_dict(norms)
+
+        # update the EMA
+        self.ema.update()
