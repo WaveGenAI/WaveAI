@@ -31,11 +31,6 @@ class Trainer(L.LightningModule):
         super().__init__()
         self.config = config
 
-        self._total_step_per_epoch = math.ceil(
-            self.config.data.train_size
-            / (self.config.train.batch_size * self.config.train.accumulate_grad_batches)
-        )
-
         self.model = WaveAI(
             codebook_count=self.config.model.num_codebooks,
             codebook_size=self.config.model.codebook_size,
@@ -51,7 +46,6 @@ class Trainer(L.LightningModule):
             self.model,
             update_after_step=500,
             update_every=10,
-            update_model_with_ema_every=self._total_step_per_epoch,
         )
 
         if self.config.model.compile:
@@ -263,10 +257,13 @@ class Trainer(L.LightningModule):
 
         warmup_scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda_warmup)
 
-        # CosineAnnealingLR Scheduler
-        max_estimated_steps = self._total_step_per_epoch * max(
-            self.trainer.max_epochs, 1
+        _total_step_per_epoch = math.ceil(
+            self.config.data.train_size
+            / (self.config.train.batch_size * self.config.train.accumulate_grad_batches)
         )
+
+        # CosineAnnealingLR Scheduler
+        max_estimated_steps = _total_step_per_epoch * max(self.trainer.max_epochs, 1)
         max_estimated_steps = (
             min(max_estimated_steps, self.trainer.max_steps)
             if self.trainer.max_steps != -1
@@ -294,3 +291,6 @@ class Trainer(L.LightningModule):
 
         # update the EMA
         self.ema.update()
+
+    def on_train_epoch_end(self):
+        self.ema.update_model_with_ema()  # update the model with the EMA
