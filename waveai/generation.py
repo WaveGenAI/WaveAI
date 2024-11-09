@@ -14,6 +14,8 @@ class Generation:
         model: torch.nn.Module,
         num_codebooks: int,
         pad_token: int,
+        start_token: int,
+        end_token: int,
         stereo: bool = False,
     ) -> None:
         self.model = model
@@ -21,7 +23,10 @@ class Generation:
 
         self.stereo = stereo
         self.num_codebooks = num_codebooks
+
         self.pad_token = pad_token
+        self.start_token = start_token
+        self.end_token = end_token
 
     def inference(
         self,
@@ -46,7 +51,7 @@ class Generation:
 
         inputs = (
             torch.ones(1, self.num_codebooks, 1, device=prompt.device).long()
-            * self.pad_token
+            * self.start_token
         )
 
         step = duration * 86 + (self.num_codebooks - 1)
@@ -97,6 +102,9 @@ class Generation:
                 inputs = torch.cat([inputs, indexs], dim=2)
                 print(f"Step {i + 1} / {step}", end="\r")
 
+                if inputs[0, -1, -1] == self.end_token:
+                    break
+
         outputs = self.pattern.reverse_delay_pattern_mask(inputs, padding_mask)[..., 1:]
 
         if self.stereo:
@@ -107,7 +115,9 @@ class Generation:
             outputs = outputs.squeeze(0)
 
         # TODO: change that
-        # replace the pad tokens with 0
+        # replace the special tokens by 0
         outputs = torch.where(outputs == self.pad_token, 0, outputs)
+        outputs = torch.where(outputs == self.start_token, 0, outputs)
+        outputs = torch.where(outputs == self.end_token, 0, outputs)
 
         return outputs

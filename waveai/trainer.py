@@ -1,6 +1,7 @@
 import math
 import os
 
+import bitsandbytes as bnb
 import lightning as L
 import torch
 from audiotools import AudioSignal
@@ -15,7 +16,6 @@ from .model import WaveAI
 from .utils.config_parser import ConfigParser
 from .utils.logs import LossTensor
 from .utils.utils import gaussian_noise_gen, shift_tokens_right
-import bitsandbytes as bnb
 
 
 class Trainer(L.LightningModule):
@@ -57,6 +57,8 @@ class Trainer(L.LightningModule):
             self.model,
             self.config.model.num_codebooks,
             self.config.model.pad_token_id,
+            self.config.model.start_token_id,
+            self.config.model.end_token_id,
             self.config.model.stereo,
         )
 

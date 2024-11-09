@@ -29,7 +29,9 @@ class AudioProcessor:
         prompt_emds, prompt_masks = self.text_enc(prompt)
         return prompt_emds, prompt_masks
 
-    def prepare_audio(self, codec: list) -> torch.Tensor:
+    def prepare_audio(
+        self, codec: list, chunk_id: int, num_chunks: int
+    ) -> torch.Tensor:
         # convert list of list to tensor
         codec = torch.Tensor(codec)
 
@@ -38,6 +40,37 @@ class AudioProcessor:
 
         # convert to batch x (channel x num_codebooks) x seq_length
         codebooks = codebooks.view(-1, codebooks.size(-1)).unsqueeze(0)
+
+        # add the start token
+        if chunk_id == 0:
+            start_token = torch.zeros(
+                codebooks.shape[0], codebooks.shape[1], 1, dtype=codebooks.dtype
+            ).fill_(self.config.model.start_token_id)
+
+            codebooks = torch.cat([start_token, codebooks], dim=-1)
+
+        # add the end token
+        if chunk_id == (num_chunks - 1):
+            end_token = torch.zeros(
+                codebooks.shape[0], codebooks.shape[1], dtype=codebooks.dtype
+            ).fill_(self.config.model.end_token_id)
+
+            # because of the delay pattern, we can't give the full length of the codebooks
+            #  [[1, 2, 3, 4, 5, 6],
+            #   [P, 1, 2, 3, 4, 5],
+            #   [P, P, 1, 2, 3, 4],
+            #   [P, P, P, 1, 2, 3],
+            #   [...]]
+            #
+            # so we need to add the end token at the right position (position 3 in this example)
+
+            pos_last_token = self.config.model.num_codebooks
+
+            # if stereo, divide by 2 because of the stereo delay pattern
+            if self.config.model.stereo:
+                pos_last_token //= 2
+
+            codebooks[:, :, -pos_last_token] = end_token
 
         if codebooks.size(1) > self.config.model.num_codebooks:
             codebooks = codebooks[
@@ -105,7 +138,12 @@ class AudioProcessor:
         prompt = [row[self.config.data.text_column] for row in rows]
         # apply the delay pattern to the audio
         inputs = [
-            self.prepare_audio(row[self.config.data.audio_column]) for row in rows
+            self.prepare_audio(
+                row[self.config.data.audio_column],
+                int(row[self.config.data.chunk_id]),
+                int(row[self.config.data.num_chunks]),
+            )
+            for row in rows
         ]
         # get the size of the inputs (seq_length)
         inputs_size = torch.tensor([input.size(-1) for input in inputs])

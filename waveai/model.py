@@ -47,8 +47,8 @@ class WaveAI(nn.Module):
         super().__init__()
         self.num_codebooks = codebook_count
 
-        # set up the embeddings (for each codebook, we have an embedding + 1 for padding)
-        embeddings = {f"codebook {k}": codebook_size + 1 for k in range(codebook_count)}
+        # set up the embeddings (for each codebook, we have an embedding + 3 for padding, start and end token)
+        embeddings = {f"codebook {k}": codebook_size + 3 for k in range(codebook_count)}
 
         self.transformer = MultiInputTransformerWrapper(
             num_tokens=embeddings,
