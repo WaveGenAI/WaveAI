@@ -10,5 +10,6 @@ rotary_embedding_torch
 wandb
 gradio 
 x-transformers
+ema-pytorch
 
 git+https://github.com/descriptinc/audiotools

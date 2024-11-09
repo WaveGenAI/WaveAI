@@ -37,7 +37,7 @@ train:
   warmup_steps: 1
   lr_max: 0.00095
   lr_min: 0.000001  
-  test_model: true
+  test_model: false
   train_num_workers: 15
   val_num_workers: 4
   log_every_n_steps: 5_000 

@@ -147,6 +147,7 @@ class AudioProcessor:
         ]
         # get the size of the inputs (seq_length)
         inputs_size = torch.tensor([input.size(-1) for input in inputs])
+
         # create the padding mask
         padding_mask = make_pad_mask(inputs_size, self.config.model.max_seq_length)
 

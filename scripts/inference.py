@@ -27,6 +27,8 @@ def setup_generation(model, config):
         model,
         config.model.num_codebooks,
         config.model.pad_token_id,
+        config.model.start_token_id,
+        config.model.end_token_id,
         config.model.stereo,
     )
     return audio_processor, generation
