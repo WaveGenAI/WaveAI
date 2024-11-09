@@ -1,6 +1,6 @@
 model:
-  num_codebooks: 18
-  stereo: true
+  num_codebooks: 4
+  stereo: false
 
   codebook_size: 1024
   pad_token_id: 1024
@@ -11,19 +11,19 @@ model:
   rotary_emb: true
 
   memory_dim: 1024
-  max_seq_length: 1500
+  max_seq_length: 6000
   max_prompt_length: 1024
 
   text_encoder: 'google-t5/t5-large'
   compile: false
 
 data:
-  dataset_id: 'WaveGenAI/audio'
+  dataset_id: '/media/works/data/data/'
   audio_column: 'codes.npy'
   text_column: 'prompt.txt'
   audio_embed_column: 'embd.npy'
   shuffle_data: false
-  train_size: 259113
+  train_size: 200_000
   
 train:
   max_epochs: 13
@@ -33,12 +33,11 @@ train:
   warmup_steps: 1
   lr_max: 0.00095
   lr_min: 0.000001  
-  test_model: true
+  test_model: false
   train_num_workers: 15
   val_num_workers: 4
   log_every_n_steps: 5_000 
   duration_audio_test: 10
-  shuffle_data: true
   noise_mean: 0.1
   noise_std: 0.5
 

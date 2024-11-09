@@ -1,9 +1,12 @@
 # some codes comes from https://github.com/jasonppy/VoiceCraft/blob/master/models/modules/utils.py
+import glob
+import os
 import random
 
 import torch
 import webdataset as wds
 from datasets import load_dataset
+from huggingface_hub import get_token
 
 
 def audio_format_converter(codec: torch.Tensor, to_stereo: bool) -> torch.Tensor:
@@ -148,7 +151,7 @@ def load_webdataset(
     """Load a webdataset dataset.
 
     Args:
-        dataset_name (str): the name of the dataset
+        dataset_name (str): the name of the dataset or the path to the dataset
         split_name (str): the name of the split
         map_func (callable): the map function. Defaults to None.
         shuffle (bool, optional): shuffle the datase. Defaults to True.
@@ -156,13 +159,16 @@ def load_webdataset(
     Returns:
         wds.WebDataset: the webdataset dataset
     """
+    if not os.path.exists(dataset_name):
+        dataset = load_dataset(dataset_name, streaming=True)
+        org, dataset_name = dataset_name.split("/")
+        n_shards = dataset[split_name].n_shards
 
-    dataset = load_dataset(dataset_name, streaming=True)
-    org, dataset_name = dataset_name.split("/")
-    n_shards = dataset[split_name].n_shards
-
-    url = f"https://huggingface.co/datasets/{org}/{dataset_name}/resolve/main/data/{split_name}-{{000000..{n_shards - 1}}}.tar"
-    url = f"pipe:curl --connect-timeout 30 --retry 30 --retry-delay 2 -f -s -L {url} -H 'Authorization:Bearer {get_token()}'"
+        url = f"https://huggingface.co/datasets/{org}/{dataset_name}/resolve/main/data/{split_name}-{{000000..{n_shards - 1}}}.tar"
+        url = f"pipe:curl --connect-timeout 30 --retry 30 --retry-delay 2 -f -s -L {url} -H 'Authorization:Bearer {get_token()}'"
+    else:
+        n_shards = len(glob.glob(os.path.join(dataset_name, f"{split_name}*.tar")))
+        url = os.path.join(dataset_name, f"{split_name}-{{000000..{n_shards - 1}}}.tar")
 
     if shuffle:
         dataset = wds.DataPipeline(

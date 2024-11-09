@@ -62,12 +62,12 @@ if __name__ == "__main__":
     dataset_train = load_webdataset(
         config.data.dataset_id,
         "train",
-        map=select,
+        map_func=select,
         shuffle=config.data.shuffle_data and not config.train.debug,
     )
 
     dataset_test = load_webdataset(
-        config.data.dataset_id, "test", map=select, shuffle=False
+        config.data.dataset_id, "test", map_func=select, shuffle=False
     )
 
     # args for the trainer

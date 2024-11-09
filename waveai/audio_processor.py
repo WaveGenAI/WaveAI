@@ -101,6 +101,7 @@ class AudioProcessor:
         Returns:
             tuple: the processed rows.
         """
+
         prompt = [row[self.config.data.text_column] for row in rows]
         # apply the delay pattern to the audio
         inputs = [
