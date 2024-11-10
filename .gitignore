@@ -160,7 +160,6 @@ cython_debug/
 #.idea/
 
 # ignore test files
-*test.py
 
 lightning_logs/
 *.wav
@@ -174,4 +173,4 @@ WAVEAI/
 
 pretrained/
 .gradio
-test*.py
+*test.py

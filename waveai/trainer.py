@@ -44,6 +44,7 @@ class Trainer(L.LightningModule):
 
         self.ema = EMA(
             self.model,
+            beta=0.99,
             update_after_step=500,
             update_every=10,
         )
@@ -291,6 +292,3 @@ class Trainer(L.LightningModule):
 
         # update the EMA
         self.ema.update()
-
-    def on_train_epoch_end(self):
-        self.ema.update_model_with_ema()  # update the model with the EMA

@@ -100,6 +100,10 @@ class WaveAI(nn.Module):
             torch.tensor: a tensor that represent the logits prob
         """
         # mask: true when attend, false when not attend
+        if x.shape[1] != self.num_codebooks:
+            raise ValueError(
+                "The number of codebooks should be equal to the number of codebooks in the model"
+            )
 
         memory = memory.to(x.device)
         memory = self.memory_proj(memory)

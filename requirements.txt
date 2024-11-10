@@ -11,5 +11,6 @@ wandb
 gradio 
 x-transformers
 ema-pytorch
+pytest
 
 git+https://github.com/descriptinc/audiotools

@@ -72,11 +72,6 @@ class AudioProcessor:
 
             codebooks[:, :, -pos_last_token] = end_token
 
-        if codebooks.size(1) > self.config.model.num_codebooks:
-            codebooks = codebooks[
-                :, : self.config.model.num_codebooks, :
-            ]  # truncate the codebooks (dangerous depending of the delay pattern)
-
         # get the delay pattern
         #  [[1, 2, 3, 4, 5, 5], -> channel 1
         #   [1, 2, 3, 4, 5, 5], -> channel 2
@@ -87,6 +82,10 @@ class AudioProcessor:
         input_ids, _ = self.delay_pattern.build_delay_pattern_mask(
             codebooks, self.config.model.pad_token_id, self.config.model.max_seq_length
         )
+
+        # truncate the number of codebooks
+        if input_ids.size(1) > self.config.model.num_codebooks:
+            input_ids = input_ids[:, : self.config.model.num_codebooks, :]
 
         # remove unused batch dimension and convert to long tensor
         input_ids = input_ids.squeeze(0).long()
