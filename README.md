@@ -1,3 +1,5 @@
+# **Archived: The code has moved with a cleaner implementation without pytorch lightning : https://github.com/WaveGenAI/phonira**
+
 # WaveAI
 A model that can make edit of music based on a prompt. Follow MusicGen architecture.
 
